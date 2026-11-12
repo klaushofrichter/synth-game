@@ -1,5 +1,5 @@
 // FM-1 Synth's rules on games-service's own runtime: choosing firmwares, the board's status reports, finishing, the
-// summary, exact replay and a player exchanged mid-game.
+// summary, exact replay, a player exchanged mid-game and the player's starred firmwares (E-013).
 import { describe, expect, it } from "vitest";
 import { loadGame, replaysExactly, seats, start } from "./harness.ts";
 
@@ -84,5 +84,34 @@ describe("FM-1 Synth", () => {
     rt.seatChanged({ seat: 0, playerId: "p9", name: "Zoe", kind: "human", edge: "south" });
     rt.submit(0, { name: "finish", payload: {} }, "human");
     expect((game.def.isOver(rt.state) as any).text).toMatch(/^Zoe played/);
+  });
+
+  it("stars firmwares newest first, takes the phone's list once, and forgets it for another player", () => {
+    const { rt } = start(game, 1, {}, 1, one());
+    const star = (id: string, on: boolean, device = "fm1", by = "board") => rt.submit(0, { name: "star", payload: { device, id, on } }, by as any);
+    expect(rt.boardView()).toMatchObject({ favorites: { fm1: [], smk37: [] }, favSynced: false });
+    // a star on the board before the phone's list arrived stays in front of it
+    expect(star("amb", true)).toEqual({ ok: true });
+    expect(rt.submit(0, { name: "favorites", payload: { list: { fm1: ["felucca", "amb", "../x", 7], smk37: ["erik37"], other: ["y"] } } }, "human")).toEqual({ ok: true });
+    expect(rt.boardView()).toMatchObject({ favorites: { fm1: ["amb", "felucca"], smk37: ["erik37"] }, favSynced: true });
+    // only once: a second list changes nothing
+    rt.submit(0, { name: "favorites", payload: { list: { fm1: ["zzz"] } } }, "human");
+    expect((rt.boardView() as any).favorites.fm1).toEqual(["amb", "felucca"]);
+    // starred again: to the front; unstarred: gone; from the phone too
+    star("felucca", true);
+    expect((rt.boardView() as any).favorites.fm1).toEqual(["felucca", "amb"]);
+    star("amb", false, "fm1", "human");
+    star("snoop37", true, "smk37", "human");
+    expect((rt.boardView() as any).favorites).toEqual({ fm1: ["felucca"], smk37: ["snoop37", "erik37"] });
+    for (const bad of [{ device: "tr808", id: "x", on: true }, { device: "fm1", id: "../x", on: true }]) {
+      expect(rt.submit(0, { name: "star", payload: bad }, "board").ok).toBe(false);
+    }
+    // another person takes the seat: their phone brings their own
+    rt.seatChanged({ seat: 0, playerId: "p9", name: "Zoe", kind: "human", edge: "south" });
+    expect(rt.boardView()).toMatchObject({ favorites: { fm1: [], smk37: [] }, favSynced: false });
+    rt.submit(0, { name: "favorites", payload: { list: { fm1: ["amb"] } } }, "human");
+    expect(rt.boardView()).toMatchObject({ favorites: { fm1: ["amb"], smk37: [] }, favSynced: true });
+    rt.submit(0, { name: "finish", payload: {} }, "human");
+    expect(replaysExactly(game, rt)).toBe(true);
   });
 });

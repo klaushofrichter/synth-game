@@ -20,3 +20,9 @@
 .fd-dev-btn { min-height: 44px; }
 .fd-dev-btn:hover { border-color: var(--felt-line, rgba(255, 255, 255, 0.12)); }
 .fd-dev-btn.on, .fd-dev-btn.on:hover { background: var(--brass, #c8962f); color: #1b1407; border-color: var(--brass, #c8962f); }
+.fd-row { display: flex; gap: 6px; align-items: stretch; }
+.fd-row .fd-fw { flex: 1; min-width: 0; }
+.fd-star { flex: none; width: 52px; padding: 0; border-radius: 12px; font-size: 1.6em; line-height: 1; color: var(--ink-soft);
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.fd-star:hover { border-color: var(--felt-line, rgba(255, 255, 255, 0.12)); }
+.fd-star.starred { color: var(--brass, #c8962f); }

@@ -5,11 +5,11 @@ community's firmwares on it.
 
 ## In short
 
-- One player, sitting at the table. The synth is on the board: play its keys, knobs and buttons by touch, with as many
-  fingers as you like.
-- **Device to start with** picks the FM-1 or the SMK-37; switch between them any time during the game.
-- **Firmware…** on the board, or the list on your phone, switches to another firmware. Each is downloaded from its
-  author's site, so the table needs the internet.
+- One player at the table. Play the synth's keys, knobs and buttons on the board by touch.
+- **Device to start with** picks the FM-1 or the SMK-37; switch any time during the game.
+- **Firmware…** on the board, or your phone's list, switches firmware. Each is downloaded from its author's site, so
+  the table needs the internet.
+- **☆** stars a firmware: starred ones come first, and your phone keeps them.
 - **Finish** on your phone ends the session.
 
 ## Playing
@@ -26,6 +26,13 @@ community's firmwares on it.
 The setting **Device to start with** is fixed once the game runs, but the board can switch any time: tap the
 **FM-1** or **SMK-37** tab in **Firmware…**, or choose the **Device** in the board's settings. The board starts that
 device on its first firmware; pick another from its list. Your phone has the same two buttons.
+
+## Favorites
+
+Tap the **☆** on a firmware, in the board's **Firmware…** window or in your phone's list, to star it; tap the **★**
+again to take the star away. The next time the list opens, starred firmwares come first, the newest star at the top.
+The stars are kept in your phone's browser, so they come back with you for the next game at this table. Another
+player who takes your seat brings their own.
 
 ## Settings on the board
 

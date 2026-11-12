@@ -29,12 +29,20 @@ export interface State {
   seat: number;
   done: boolean;
   endedAt: number | null;
+  /** The player's starred firmwares per device, newest star first (E-013). Kept on the player's phone between games:
+   * the phone sends its list once (`favorites`), then keeps a copy of this one. */
+  favorites: Record<Device, string[]>;
+  /** The phone has sent its list (for this player). */
+  favSynced: boolean;
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const DEVICES: Device[] = ["fm1", "smk37"];
 const DEVICE_NAME: Record<Device, string> = { fm1: "FM-1", smk37: "SMK-37" };
 const STATES: RunState[] = ["idle", "loading", "running", "error"];
+/** At most this many stars per device (more than either catalog lists). */
+const MAX_FAVORITES = 200;
+const noFavorites = (): Record<Device, string[]> => ({ fm1: [], smk37: [] });
 const text = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max) : "");
 
 function choose(state: State, device: Device, id: string, name: string, ctx: GameContext): State {
@@ -75,6 +83,8 @@ function view(s: State) {
     played: s.played.map((p) => ({ id: p.id, name: p.name, device: p.device })),
     seat: s.seat,
     done: s.done,
+    favorites: s.favorites,
+    favSynced: s.favSynced,
   };
 }
 
@@ -84,6 +94,10 @@ function describeStep(step: StepInfo<State>): StepDescription | null {
   if (name === "firmware") return { text: step.accepted ? `picks ${step.after.firmwareName}` : "tries to pick a firmware" };
   if (name === "device") return step.accepted ? { text: `switches to the ${DEVICE_NAME[step.after.device]}` } : null;
   if (name === "status") return step.accepted ? { text: `board: ${step.after.status.text || step.after.status.state}` } : null;
+  if (name === "star" && step.accepted) {
+    const p = step.intent.payload as { id?: string; on?: boolean };
+    return { text: `${p.on ? "stars" : "unstars"} ${p.id}` };
+  }
   if (name === "finish") return { text: "is done playing" };
   return null;
 }
@@ -102,6 +116,8 @@ export default defineGame<State>({
       seat: me?.seat ?? 0,
       done: false,
       endedAt: null,
+      favorites: noFavorites(),
+      favSynced: false,
     };
   },
 
@@ -136,6 +152,28 @@ export default defineGame<State>({
         if (next.state === state.status.state && next.text === state.status.text) return { state };
         return { state: { ...state, status: next } };
       }
+      case "star": {
+        // a star on (to the front: newest first) or off, from the board's firmware window or the phone (E-013)
+        const device = p.device as Device;
+        const id = typeof p.id === "string" ? p.id : "";
+        if (!DEVICES.includes(device)) return { reject: "That is not a device of this game" };
+        if (!ID.test(id)) return { reject: "That is not a firmware of this device" };
+        const rest = state.favorites[device].filter((f) => f !== id);
+        const list = p.on === true ? [id, ...rest].slice(0, MAX_FAVORITES) : rest;
+        if (list.join() === state.favorites[device].join()) return { state };
+        return { state: { ...state, favorites: { ...state.favorites, [device]: list } } };
+      }
+      case "favorites": {
+        // the phone's list from earlier games, once; stars given before it came stay in front (newer)
+        if (state.favSynced) return { state };
+        const sent = (p.list ?? {}) as Record<string, unknown>;
+        const favorites = noFavorites();
+        for (const d of DEVICES) {
+          const theirs = Array.isArray(sent[d]) ? (sent[d] as unknown[]).filter((x): x is string => typeof x === "string" && ID.test(x)) : [];
+          favorites[d] = [...new Set([...state.favorites[d], ...theirs])].slice(0, MAX_FAVORITES);
+        }
+        return { state: { ...state, favorites, favSynced: true } };
+      }
       case "finish":
         return { state: { ...state, done: true, endedAt: ctx.now() }, events: [{ name: "finished" }] };
       default:
@@ -157,7 +195,8 @@ export default defineGame<State>({
   },
 
   onSeatChanged(state, seat) {
-    return { state: { ...state, player: seat.name } };
+    // another person: their phone brings their own stars (E-013)
+    return { state: { ...state, player: seat.name, favorites: noFavorites(), favSynced: false } };
   },
 
   describe: describeStep,
