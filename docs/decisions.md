@@ -81,3 +81,7 @@ Records are history: an older record is not edited when a newer one changes it. 
   pick another, and follows the device when the phone switches it. The tabs are framed in the platform's green
   (`--jade`). Changes E-006, where a tab only showed the other device's list and the board switched when a firmware was
   picked from it. *Why:* on a table the tabs looked broken next to the phone's buttons, which switch at once.
+- **E-012 · 2026-11-12 · Klaus** — The game offers the platform's one-seat layout (`seatLayouts: [1]`, games-service
+  D-282) instead of the two-seat one: the lobby shows it as a solo game, its single seat at the south, and the player
+  count in words ("needs exactly one player"). *Why:* the game is for one player at the board (E-001); a second, empty
+  North seat only suggested otherwise. The platform did not offer a one-seat layout before D-282.
