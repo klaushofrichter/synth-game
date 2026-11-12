@@ -7,7 +7,7 @@ Checks on the way:
   - the board boots the FM-1's first firmware (downloaded from its author's site, as on a table) and says it runs, on
     the board and on the phone; the panel is drawn; a touch on a key lights it;
   - the phone layout rules of games-service (D-065);
-  - the firmware window lists both devices; picking from the SMK-37 tab switches the board to the SMK-37 (E-006);
+  - the firmware window's SMK-37 tab switches the board to the SMK-37, on its first firmware (E-006, E-011);
   - the phone switches the device back; facing north turns the bar, the panel and the seat plate in place (E-007,
     E-008) without moving them;
   - Finish ends the game with a summary naming what was played.
@@ -76,7 +76,7 @@ def main():
         with sync_playwright() as p:
             # The table's kiosk plays sound without a tap first; so does this browser.
             browser = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
-            board = browser.new_page(viewport={"width": 1920, "height": 1080})
+            board = browser.new_context(viewport={"width": 1920, "height": 1080}, has_touch=True).new_page()
             watch(board, "board")
             board.goto(BASE + "/board/")
             board.wait_for_selector("button.tile")
@@ -110,16 +110,19 @@ def main():
             touch(board, 0.30, 0.91, 11, "pointerup")
             assert held != before, "a touch on a key changed nothing on the panel"
 
-            # The firmware window: both devices; a pick from the SMK-37 tab switches the board (E-006).
+            # The firmware window: its SMK-37 tab switches the board to the SMK-37 at once, on its first firmware, as
+            # the phone's buttons do (E-006, E-011). Tapped, as on the table's touch screen.
             board.click(".fs-pick")
             board.wait_for_selector(".fs-picker:not([hidden]) .fs-card")
             assert board.locator(".fs-tab").all_inner_texts() == ["FM-1", "SMK-37"]
             assert "FM-1" in board.inner_text(".fs-sheet-title")
-            board.click(".fs-tab[data-device=smk37]")
+            board.tap(".fs-tab[data-device=smk37]")
             wait(lambda: "SMK-37" in board.inner_text(".fs-sheet-title"), 10, "the SMK-37 list")
-            shot(board, "picker-smk37")
-            board.click(".fs-card[data-id=erik37]")
             wait_running(board, deck, "Erik37")
+            wait(lambda: board.locator(".fs-card.on[data-id=erik37]").count(), 10, "Erik37 marked in the window")
+            assert board.locator(".fs-tab[data-device=smk37]").get_attribute("aria-selected") == "true"
+            shot(board, "picker-smk37")
+            board.click(".fs-close")
             assert "SMK-37" in board.inner_text(".fs-name")
             wait(lambda: board.evaluate("() => document.querySelector('.fs-panel').width") == 1920, 10, "the SMK-37 panel")
             shot(board, "board-smk37")

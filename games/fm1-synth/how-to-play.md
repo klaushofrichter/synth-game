@@ -24,8 +24,8 @@ community's firmwares on it.
 ## Switching the device
 
 The setting **Device to start with** is fixed once the game runs, but the board can switch any time: tap the
-**FM-1** or **SMK-37** tab in **Firmware…** and pick one of that device's firmwares, or choose the **Device** in the
-board's settings (it starts on that device's first firmware). Your phone has the same two buttons.
+**FM-1** or **SMK-37** tab in **Firmware…**, or choose the **Device** in the board's settings. The board starts that
+device on its first firmware; pick another from its list. Your phone has the same two buttons.
 
 ## Settings on the board
 

@@ -6,7 +6,11 @@ can overrule. The emulator itself (crates/, web/) keeps its own history in the R
 
 Format: **E-nnn · date · decided by** — decision. *Why:* reason.
 
-Records are history: an older record is not edited when a newer one changes it.
+Records are history: an older record is not edited when a newer one changes it. Where that happened:
+
+| Earlier | Changed by | What changed |
+| --- | --- | --- |
+| E-006 | E-011 | The firmware window's device tabs switch the board at once |
 
 - **E-001 · 2026-11-12 · Klaus** — The emulated FM-1 and SMK-37 become one game for Game Table, in this repository's
   `games/` folder (an extra game repository, like extra-games): one player, sitting at the table on South, no AI
@@ -72,3 +76,8 @@ Records are history: an older record is not edited when a newer one changes it.
   (`assets/emu/build.json`, `scripts/emu-source.mjs`), and `tests/assets.test.ts` fails when the source, the copied web
   files or the catalogs have moved on. *Why:* rebuilding the wasm in CI and comparing bytes would fail on paths and
   toolchain versions a build embeds; a fingerprint is exact about the source and cheap.
+- **E-011 · 2026-11-12 · Klaus** — The FM-1 and SMK-37 tabs in the board's firmware window switch the board to that
+  device at once, on its first firmware, as the phone's two buttons do; the window stays open on that device's list to
+  pick another, and follows the device when the phone switches it. The tabs are framed in the platform's green
+  (`--jade`). Changes E-006, where a tab only showed the other device's list and the board switched when a firmware was
+  picked from it. *Why:* on a table the tabs looked broken next to the phone's buttons, which switch at once.
