@@ -67,7 +67,7 @@ export function mount(root, ctx) {
         <div class="fs-away" hidden></div></div>
       <div class="fs-picker" hidden>
         <div class="fs-sheet">
-          <div class="fs-sheet-head"><div><div class="fs-sheet-title"></div><div class="fs-sheet-sub muted">Tap one to play it. It is downloaded from its author's site.</div></div>
+          <div class="fs-sheet-head"><div><div class="fs-sheet-title"></div><div class="fs-sheet-sub muted">Tap one to play it. It is downloaded from its author's site. Starred ones come first, kept on your phone.</div></div>
             <div class="fs-tabs" role="tablist">${DEVICES.map((d) => `<button class="fs-tab" type="button" role="tab" data-device="${d.id}">${d.name}</button>`).join("")}</div>
             <button class="fs-btn fs-close" type="button" aria-label="Close">Close</button></div>
           <div class="fs-list"></div>
@@ -86,6 +86,7 @@ export function mount(root, ctx) {
   let info = null, view = null;
   const catalogs = new Map(); // device -> { device, default, firmwares, byId }
   let pickerDevice = null; // the device whose firmwares the picker shows
+  let pickerOrder = null; // { device, ids }: the order of the window's list, fixed while it is open (E-013)
   let defaultAsked = -1; // the choice for which the device's first firmware was asked for (once)
   let synth = null, synthLoading = null;
   let booted = -1; // the choice the emulator booted (or is booting)
@@ -178,24 +179,46 @@ export function mount(root, ctx) {
     showTap();
   }
 
+  /** Starred firmwares first, newest star first, then the catalog's order (E-013). */
+  function ordered(catalog) {
+    const stars = (view?.favorites?.[catalog.device] ?? []).filter((id) => catalog.byId.has(id));
+    const starred = new Set(stars);
+    return [...stars, ...catalog.firmwares.map((f) => f.id).filter((id) => !starred.has(id))];
+  }
+
   async function renderPicker() {
     const device = pickerDevice ?? view?.device ?? "fm1";
     for (const t of picker.querySelectorAll(".fs-tab")) t.setAttribute("aria-selected", String(t.dataset.device === device));
     const catalog = await loadCatalog(device);
     if (device !== (pickerDevice ?? view?.device ?? "fm1")) return; // another tab was tapped meanwhile
     const here = device === view?.device;
+    // the order is taken when the window opens on a device, so a star does not move the card under the finger
+    if (pickerOrder?.device !== device) pickerOrder = { device, ids: ordered(catalog) };
+    const stars = new Set(view?.favorites?.[device] ?? []);
     $(".fs-sheet-title").textContent = `Firmwares for the ${deviceName(device)} (${catalog.firmwares.length})`;
-    $(".fs-list").innerHTML = catalog.firmwares
-      .map((f) => `<button type="button" class="fs-card ${here && view?.firmware === f.id ? "on" : ""}" data-id="${esc(f.id)}">
-        <div class="fs-card-head"><b>${esc(f.name)}</b><span class="muted">${esc(f.version ?? "")}</span></div>
+    const rows = pickerOrder.ids
+      .map((id) => catalog.byId.get(id))
+      .filter(Boolean)
+      .map((f) => {
+        const on = stars.has(f.id);
+        return `<div role="button" class="fs-card ${here && view?.firmware === f.id ? "on" : ""}" data-id="${esc(f.id)}">
+        <div class="fs-card-head"><b>${esc(f.name)}</b><span class="muted">${esc(f.version ?? "")}</span>
+          <button type="button" class="fs-star ${on ? "starred" : ""}" aria-pressed="${on}" aria-label="${on ? "Remove the star" : "Star it"}">${on ? "★" : "☆"}</button></div>
         <div class="fs-card-by muted">${esc(f.author ?? "")}</div>
-        <div class="fs-card-about">${esc(f.about ?? "")}</div></button>`)
+        <div class="fs-card-about">${esc(f.about ?? "")}</div></div>`;
+      })
       .join("");
+    const list = $(".fs-list");
+    if (list.dataset.rows !== rows) {
+      list.dataset.rows = rows;
+      list.innerHTML = rows;
+    }
   }
 
   async function openPicker() {
     if (!plays()) return;
     pickerDevice = view.device;
+    pickerOrder = null;
     picker.hidden = false;
     await renderPicker();
     picker.querySelector(".fs-card.on")?.scrollIntoView({ block: "center" });
@@ -230,6 +253,13 @@ export function mount(root, ctx) {
     const device = pickerDevice ?? view?.device;
     const catalog = catalogs.get(device);
     if (!card || !catalog) return;
+    const star = e.target.closest(".fs-star");
+    if (star) {
+      // a star on or off; the window stays open
+      if (!view || view.done) return;
+      await ctx.act(playerSeat(), "star", { device, id: card.dataset.id, on: star.getAttribute("aria-pressed") !== "true" });
+      return;
+    }
     picker.hidden = true;
     const f = catalog.byId.get(card.dataset.id);
     if (!f || (f.id === view?.firmware && device === view?.device)) return;

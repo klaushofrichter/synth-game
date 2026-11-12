@@ -85,3 +85,12 @@ Records are history: an older record is not edited when a newer one changes it. 
   D-282) instead of the two-seat one: the lobby shows it as a solo game, its single seat at the south, and the player
   count in words ("needs exactly one player"). *Why:* the game is for one player at the board (E-001); a second, empty
   North seat only suggested otherwise. The platform did not offer a one-seat layout before D-282.
+- **E-013 · 2026-11-12 · Klaus** — Favorites: the player stars firmwares, on the board's firmware window or on the
+  phone; starred ones come first in both lists, newest star first, then the catalog's order. A list's order is taken
+  when it opens (the board's window, a device's list on the phone), so a star does not move the card under the
+  finger. The stars live in the player's phone browser (`localStorage`), not on the board and not in games-service:
+  the phone sends its list once per game (`favorites`), the game keeps it in its state (`star` changes it, from the
+  board or the phone), and the phone stores the game's list back. Another person taking the seat starts without stars
+  and their phone sends theirs. *Why:* the table PC's kiosk browser is incognito and forgets its storage on every
+  restart, while a phone keeps it; a file saved to and loaded from the table PC (Klaus's first idea) needs a file
+  picker on a touch-only kiosk. The board keeps no copy, so one player's stars never show for the next.
