@@ -11,10 +11,13 @@
 A pocket synthesizer as a game for [Game Table](https://github.com/klaushofrichter/games-service): the **M-VAVE FM-1**
 (or its 37-key sibling, the **SMK-37**), emulated in the table's board, with any of the community's firmwares on it.
 One player sits at the table and plays the synth on the board by touch; their phone picks firmwares and ends the
-session.
+session. More about Game Table, its tables and its other games: **[games.skylar.technology](https://games.skylar.technology)**.
 
 ![FM-1 Synth on a Game Table board: the FM-1's front panel running Felucca, a bar with Restart and Firmware… above it,
 the player's seat plate below](docs/media/game-table-fm1.png)
+
+![The same board with the SMK-37: pitch and mod wheels, the screen, knobs, pads, faders and 37 keys, running the grand
+piano Erik37](docs/media/game-table-smk37.png)
 
 The emulator is **[fm1-emu](https://github.com/joakimeriksson/fm1-emu) by Joakim Eriksson** and its contributors: it
 emulates the FM-1's CPU, screen, keys, knobs and audio so the firmwares run unchanged. This repository is a copy of it
@@ -25,6 +28,9 @@ author's site when it is picked, the same package one would install on a real FM
 
 ## The game
 
+<img src="docs/media/game-table-deck.png" width="300" align="right" alt="The player's phone during the game: the
+device and the firmware that runs, buttons for the FM-1 and the SMK-37, and the list of firmwares">
+
 - **One player, at the table.** The lobby works as for every game: join with the QR code, mark ready, start. The player
   sits on South.
 - **The board** shows the device's front panel and the platform's own controls (seat plate, settings, Lobby). Keys,
@@ -34,13 +40,15 @@ author's site when it is picked, the same package one would install on a real FM
   board between the devices, as the phone's two buttons do.
 - **The board's settings** (the gear) have the device, the volume, the emulated clock and Restart. The game setting
   *Device to start with* picks the device before the start.
-- **The phone** shows what runs, the firmware list, the two devices and **Finish**, which ends the session with a
-  summary of what was played.
+- **The phone** (right) shows what runs, the firmware list, the two devices and **Finish**, which ends the session
+  with a summary of what was played.
 - **The turn button** faces the game north for a reader on the other side: the bar, the panel and the seat plate turn
   in place.
 - **Saves:** patches and settings a firmware saves with its own controls stay in the table's browser, per firmware.
 - **Remote players and watchers** see what is played, but the emulator and its sound run only on the table's own
   board.
+
+<br clear="right">
 
 The rules for players are [`games/fm1-synth/how-to-play.md`](games/fm1-synth/how-to-play.md); the decisions behind the
 game are in [`docs/decisions.md`](docs/decisions.md).
