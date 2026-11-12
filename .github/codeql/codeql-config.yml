@@ -1,0 +1,10 @@
+# CodeQL scans this repository's own code (E-009): the Game Table game, its tests and scripts, and the workflows.
+# The emulator and its tools (crates/, web/, tools/, probes/, …) come from upstream (joakimeriksson/fm1-emu) unchanged;
+# findings there belong upstream. The game's copies of upstream's web files (games/fm1-synth/assets/emu) are scanned,
+# since they ship to tables from here.
+name: synth-game
+paths:
+  - games
+  - scripts
+  - tests
+  - .github

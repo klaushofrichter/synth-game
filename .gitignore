@@ -30,3 +30,15 @@ _site/
 # tools/hwdsp.py run: raw results (tests/hwdsp/fm1.txt is the reference, from export)
 tests/hwdsp/*.json
 work/film/
+
+# Game Table (games/fm1-synth): dependencies and the games-service checkout the tests run against
+node_modules/
+.games-service
+out/
+e2e-out/
+__pycache__/
+# secrets and editor swap files: never committed (the repository is public)
+.env
+.env.*
+*.swp
+*.swo

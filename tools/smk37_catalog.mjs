@@ -11,21 +11,23 @@ const page = await (await fetch(SITE)).text();
 const fwList = JSON.parse(page.match(/const FW = (\[.*?\]);\n/s)[1]);
 const text = (s) => s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
   .replace(/&#x27;|&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
-// a card's origin: "new firmware · AUTHOR", or "<a ORIGINAL>based on BASE by AUTHOR</a> · ... <br>
-// SMK-37 port: <a PORT>owner/repo</a>" (or "X by AUTHOR ... <br>SMK-37 build: <a ..>")
+// a card's origin: "new firmware · AUTHOR", "GitHub: <a REPO>OWNER/name</a>" (genkigenki's originals), or
+// "<a ORIGINAL>based on BASE by AUTHOR</a> · ... <br>SMK-37 port: <a PORT>owner/repo</a>" (or "X by AUTHOR ... <br>SMK-37
+// build: <a ..>")
 const cards = new Map();
-for (const m of page.matchAll(/<article class="card fw[^"]*" data-fw="([^"]+)"[^>]*>(.*?)<\/article>/gs)) {
+for (const m of page.matchAll(/<article class="card fw[^"]*"[^>]*?\sdata-fw="([^"]+)"[^>]*>(.*?)<\/article>/gs)) {
   const body = m[2];
   const from = body.match(/<div class="from">(.*?)<\/div>/s)?.[1] || "";
   const [first, second = ""] = from.split(/<br\s*\/?>/);
   const orig = text(first.split(" · ")[0]);
   const by = orig.match(/^(?:new firmware|.*?\bby) (.+)$/)?.[1] || orig.replace(/^new firmware · /, "");
-  const port = second.match(/<a href="([^"]+)">([^<]+)<\/a>/);
+  const github = text(first).match(/^GitHub: ([^/\s]+)\//)?.[1];
+  const port = github ? null : second.match(/<a href="([^"]+)">([^<]+)<\/a>/);
   cards.set(m[1], {
     repo: port?.[1] || body.match(/<h3><a href="([^"]+)"/)?.[1],
     upstream: first.match(/^<a href="([^"]+)">based on/)?.[1] || null,
     base: orig.match(/^based on (.+?) by /)?.[1] || null,
-    author: first.startsWith("new firmware") ? text(first).split("·").pop().trim() : by,
+    author: github || (first.startsWith("new firmware") ? text(first).split("·").pop().trim() : by),
     porter: port ? port[2].split("/")[0] : null,
     about: text(body.match(/<p>(.*?)<\/p>/s)?.[1] || ""),
   });
@@ -44,7 +46,8 @@ const firmwares = [{
   download: "https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/SMK-37Pro/SMK-37%20Pro_016.fwsc",
   repo: "https://github.com/genkigenki/fm1-to-smk37",
 }];
-for (const f of fwList) {
+// (the page also lists FM-1 builds, `community` entries with only an `fm1` package: not SMK-37 ports)
+for (const f of fwList.filter((f) => f.v?.pro)) {
   const c = cards.get(f.id) || {};
   const twin = c.upstream && fm1.find((g) => norm(g.repo) === norm(c.upstream));
   firmwares.push({
