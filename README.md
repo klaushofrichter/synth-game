@@ -30,8 +30,8 @@ author's site when it is picked, the same package one would install on a real FM
 - **The board** shows the device's front panel and the platform's own controls (seat plate, settings, Lobby). Keys,
   knobs, buttons, pads and faders are played by touch, with as many fingers as you like. There is no keyboard, MIDI or
   other device to connect.
-- **Firmware…** on the board opens a window with every firmware for the FM-1 and the SMK-37 (a tab each); picking one of
-  the other device's switches the board to it.
+- **Firmware…** on the board opens a window with every firmware of the device; its FM-1 and SMK-37 tabs switch the
+  board between the devices, as the phone's two buttons do.
 - **The board's settings** (the gear) have the device, the volume, the emulated clock and Restart. The game setting
   *Device to start with* picks the device before the start.
 - **The phone** shows what runs, the firmware list, the two devices and **Finish**, which ends the session with a

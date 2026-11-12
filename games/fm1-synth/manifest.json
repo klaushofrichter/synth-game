@@ -1,7 +1,7 @@
 {
   "id": "fm1-synth",
   "name": "FM-1 Synth",
-  "version": "2026.11.12.5",
+  "version": "2026.11.12.6",
   "sdk": "^0.1",
   "description": "Play an emulated pocket synthesizer, the M-VAVE {device}, on the board: pick one of the community's firmwares and play it by touch.",
   "players": { "min": 1, "max": 1 },

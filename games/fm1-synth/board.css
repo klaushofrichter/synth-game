@@ -44,10 +44,10 @@
 .fs-sheet-sub { font-size: 20px; margin-top: 4px; }
 .fs-sheet-head > div:first-child { flex: 1; min-width: 0; }
 /* FM-1 | SMK-37: which device's firmwares the picker lists */
-.fs-tabs { display: flex; flex: none; border-radius: 14px; overflow: hidden; border: 2px solid var(--brass-deep, #8a6216); }
+.fs-tabs { display: flex; flex: none; border-radius: 14px; overflow: hidden; border: 2px solid var(--jade, #5fbf8f); }
 .fs-tab { min-height: 60px; min-width: 150px; padding: 0 24px; font: 600 22px system-ui, sans-serif; color: var(--ink);
   background: rgba(8, 22, 19, 0.82); border: 0; cursor: pointer; touch-action: manipulation; }
-.fs-tab + .fs-tab { border-left: 2px solid var(--brass-deep, #8a6216); }
+.fs-tab + .fs-tab { border-left: 2px solid var(--jade, #5fbf8f); }
 .fs-tab[aria-selected="true"] { background: var(--brass, #c8962f); color: #1b1407; }
 .fs-list { flex: 1; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; padding: 4px 30px 30px;
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-content: start; }
