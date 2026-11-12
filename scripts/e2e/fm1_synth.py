@@ -7,6 +7,7 @@ Checks on the way:
   - the board boots the FM-1's first firmware (downloaded from its author's site, as on a table) and says it runs, on
     the board and on the phone; the panel is drawn; a touch on a key lights it;
   - the phone layout rules of games-service (D-065);
+  - a star in the firmware window puts that firmware first the next time it opens, and the phone keeps it (E-013);
   - the firmware window's SMK-37 tab switches the board to the SMK-37, on its first firmware (E-006, E-011);
   - the phone switches the device back; facing north turns the bar, the panel and the seat plate in place (E-007,
     E-008) without moving them;
@@ -109,6 +110,26 @@ def main():
             held = board.evaluate("() => document.querySelector('.fs-panel').toDataURL()")
             touch(board, 0.30, 0.91, 11, "pointerup")
             assert held != before, "a touch on a key changed nothing on the panel"
+
+            # Favorites: a star in the window keeps the order while it is open, puts the firmware first the next time,
+            # and the phone keeps it in its browser (E-013).
+            board.click(".fs-pick")
+            board.wait_for_selector(".fs-picker:not([hidden]) .fs-card")
+            wait(lambda: deck.evaluate("() => localStorage.getItem('fm1-synth.favorites')") is not None, 10,
+                 "the phone to keep its (empty) stars")
+            fav = board.locator(".fs-card").nth(2).get_attribute("data-id")
+            board.tap(f".fs-card[data-id='{fav}'] .fs-star")
+            wait(lambda: board.locator(f".fs-card[data-id='{fav}'] .fs-star.starred").count(), 10, "the star on the board")
+            assert board.locator(".fs-card").nth(2).get_attribute("data-id") == fav, "the starred card moved while open"
+            assert "Felucca" in status(board), "a star changed the firmware"
+            board.click(".fs-close")
+            board.click(".fs-pick")
+            wait(lambda: board.locator(".fs-card").first.get_attribute("data-id") == fav, 10, f"{fav} first in the window")
+            wait(lambda: fav in (deck.evaluate("() => localStorage.getItem('fm1-synth.favorites')") or ""), 10,
+                 "the phone to keep the star")
+            assert deck.locator(f".fd-star.starred[data-id='{fav}']").count(), "the phone shows no star"
+            shot(board, "picker-favorite")
+            board.click(".fs-close")
 
             # The firmware window: its SMK-37 tab switches the board to the SMK-37 at once, on its first firmware, as
             # the phone's buttons do (E-006, E-011). Tapped, as on the table's touch screen.
