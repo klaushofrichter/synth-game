@@ -10,9 +10,13 @@
 .fd-list { flex: 1; min-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .fd-fw { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 10px 12px; min-height: 52px;
   border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 2px solid rgba(255, 255, 255, 0.12); color: var(--ink); }
+/* Touch only: a long press neither selects the name nor leaves the theme's hover frame behind (iOS keeps :hover). */
+.fd-fw, .fd-dev-btn { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.fd-fw:hover { border-color: rgba(255, 255, 255, 0.12); }
 .fd-fw span { font-size: 0.8em; color: var(--ink-soft); }
-.fd-fw.on { border-color: var(--brass, #c8962f); background: rgba(200, 150, 47, 0.16); }
+.fd-fw.on, .fd-fw.on:hover { border-color: var(--brass, #c8962f); background: rgba(200, 150, 47, 0.16); }
 .fd-finish { min-height: 52px; }
 .fd-devices { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .fd-dev-btn { min-height: 44px; }
-.fd-dev-btn.on { background: var(--brass, #c8962f); color: #1b1407; border-color: var(--brass, #c8962f); }
+.fd-dev-btn:hover { border-color: var(--felt-line, rgba(255, 255, 255, 0.12)); }
+.fd-dev-btn.on, .fd-dev-btn.on:hover { background: var(--brass, #c8962f); color: #1b1407; border-color: var(--brass, #c8962f); }
