@@ -185,9 +185,6 @@ export function mount(root, ctx) {
     if (device !== (pickerDevice ?? view?.device ?? "fm1")) return; // another tab was tapped meanwhile
     const here = device === view?.device;
     $(".fs-sheet-title").textContent = `Firmwares for the ${deviceName(device)} (${catalog.firmwares.length})`;
-    $(".fs-sheet-sub").textContent = here
-      ? "Tap one to play it. It is downloaded from its author's site."
-      : `Tap one to switch the board to the ${deviceName(device)} and play it. It is downloaded from its author's site.`;
     $(".fs-list").innerHTML = catalog.firmwares
       .map((f) => `<button type="button" class="fs-card ${here && view?.firmware === f.id ? "on" : ""}" data-id="${esc(f.id)}">
         <div class="fs-card-head"><b>${esc(f.name)}</b><span class="muted">${esc(f.version ?? "")}</span></div>
@@ -215,12 +212,18 @@ export function mount(root, ctx) {
   picker.addEventListener("click", (e) => {
     if (e.target === picker) picker.hidden = true;
   });
+  // A tab switches the board to that device at once, on its first firmware, as the phone's buttons do (E-011); the
+  // window stays open on that device's list, to pick another.
   picker.querySelector(".fs-tabs").addEventListener("click", (e) => {
     const tab = e.target.closest(".fs-tab");
-    if (!tab || tab.dataset.device === pickerDevice) return;
-    pickerDevice = tab.dataset.device;
-    $(".fs-list").scrollTop = 0;
-    renderPicker();
+    if (!tab) return;
+    const device = tab.dataset.device;
+    if (device !== pickerDevice) {
+      pickerDevice = device;
+      $(".fs-list").scrollTop = 0;
+      renderPicker();
+    }
+    setDevice(device);
   });
   $(".fs-list").addEventListener("click", async (e) => {
     const card = e.target.closest(".fs-card");
@@ -287,7 +290,14 @@ export function mount(root, ctx) {
           if (f) ctx.act(playerSeat(), "firmware", { id: f.id, name: f.name, device: c.device });
           return;
         }
-        if (picker.hidden === false) renderPicker();
+        if (picker.hidden === false) {
+          // the window shows the device the board has, also when the phone switched it meanwhile
+          if (pickerDevice !== view.device) {
+            pickerDevice = view.device;
+            $(".fs-list").scrollTop = 0;
+          }
+          renderPicker();
+        }
         boot();
       });
     },
