@@ -94,3 +94,6 @@ Records are history: an older record is not edited when a newer one changes it. 
   and their phone sends theirs. *Why:* the table PC's kiosk browser is incognito and forgets its storage on every
   restart, while a phone keeps it; a file saved to and loaded from the table PC (Klaus's first idea) needs a file
   picker on a touch-only kiosk. The board keeps no copy, so one player's stars never show for the next.
+- **E-014 · 2026-11-12 · Klaus** — **Finish** on the phone asks first ("End the session?", with **Keep playing** and
+  **Finish**). *Why:* it sits at the end of the firmware list and ends the game for good: the platform has no way back
+  into a finished game, only the board's **Play again** (and the phone's Ready) for a new one.

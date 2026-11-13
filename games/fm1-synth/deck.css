@@ -26,3 +26,8 @@
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .fd-star:hover { border-color: var(--felt-line, rgba(255, 255, 255, 0.12)); }
 .fd-star.starred { color: var(--brass, #c8962f); }
+.fd-confirm { display: flex; flex-direction: column; gap: 8px; }
+.fd-confirm-text { font-size: 0.9em; color: var(--ink-soft); }
+.fd-confirm-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.fd-confirm-btns button { min-height: 52px; }
+.fd-confirm[hidden], .fd-finish[hidden] { display: none; }
