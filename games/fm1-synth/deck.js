@@ -32,6 +32,8 @@ export function mount(root, ctx) {
     <div class="fd-hint muted">Play the synth on the board. Pick another firmware here or on the board. Starred ones come first.</div>
     <div class="fd-list"></div>
     <button type="button" class="fd-finish">Finish</button>
+    <div class="fd-confirm" hidden><div class="fd-confirm-text">End the session? It can't be continued; the board offers Play again.</div>
+      <div class="fd-confirm-btns"><button type="button" class="primary fd-keep">Keep playing</button><button type="button" class="fd-end">Finish</button></div></div>
   </div>`;
   const $ = (s) => root.querySelector(s);
   let view = null, catalog = null, device = null;
@@ -94,7 +96,17 @@ export function mount(root, ctx) {
       if (view && !view.done && b.dataset.device !== view.device) ctx.send("device", { device: b.dataset.device });
     }),
   );
-  $(".fd-finish").addEventListener("click", () => ctx.send("finish", {}));
+  // Finish ends the game for good (the platform has no way back into it), so it asks first.
+  const confirming = (on) => {
+    $(".fd-finish").hidden = on;
+    $(".fd-confirm").hidden = !on;
+  };
+  $(".fd-finish").addEventListener("click", () => confirming(true));
+  $(".fd-keep").addEventListener("click", () => confirming(false));
+  $(".fd-end").addEventListener("click", () => {
+    confirming(false);
+    ctx.send("finish", {});
+  });
 
   return {
     update(v) {
@@ -114,6 +126,7 @@ export function mount(root, ctx) {
       $(".fd-text").textContent = v.done ? "Done" : v.status.text || "";
       $(".fd-dot").dataset.state = v.status.state;
       $(".fd-finish").disabled = v.done;
+      if (v.done) confirming(false);
       root.querySelectorAll(".fd-dev-btn").forEach((b) => {
         b.classList.toggle("on", b.dataset.device === v.device);
         b.disabled = v.done;

@@ -11,7 +11,7 @@ Checks on the way:
   - the firmware window's SMK-37 tab switches the board to the SMK-37, on its first firmware (E-006, E-011);
   - the phone switches the device back; facing north turns the bar, the panel and the seat plate in place (E-007,
     E-008) without moving them;
-  - Finish ends the game with a summary naming what was played.
+  - Finish asks first: Keep playing goes back to the game; Finish ends it with a summary naming what was played.
 
 The firmwares come from their authors' sites (thefirmwarehub.com, genkigenki.github.io), so this check needs the
 internet, as a table does. Starts its own Table Host from .games-service with GAMES_DIR pointing at this repo's games/.
@@ -167,6 +167,13 @@ def main():
 
             # Finish on the phone: the game ends with a summary of what was played.
             deck.click(".fd-finish")
+            deck.wait_for_selector(".fd-confirm:not([hidden])")
+            check(deck, "phone asking to finish")
+            shot(deck, "phone-finish")
+            deck.click(".fd-keep")
+            assert deck.locator(".fd-finish").is_visible() and a("GET", "/state")["phase"] == "active", "Keep playing did not go back"
+            deck.click(".fd-finish")
+            deck.click(".fd-end")
             wait(lambda: a("GET", "/state")["phase"] == "finished", 15, "the game to finish")
             summary = a("GET", "/state")["summary"]["text"]
             for part in ("Klaus played", "Felucca", "on the FM-1", "Erik37", "on the SMK-37"):

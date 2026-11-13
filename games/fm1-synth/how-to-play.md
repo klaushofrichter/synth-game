@@ -10,7 +10,7 @@ community's firmwares on it.
 - **Firmware…** on the board, or your phone's list, switches firmware. Each is downloaded from its author's site, so
   the table needs the internet.
 - **☆** stars a firmware: starred ones come first, and your phone keeps them.
-- **Finish** on your phone ends the session.
+- **Finish** on your phone ends the session (it asks first).
 
 ## Playing
 
