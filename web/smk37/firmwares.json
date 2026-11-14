@@ -248,7 +248,6 @@
    "porter": "genkigenki",
    "repo": "https://github.com/genkigenki/fm1-tracker-ketch/tree/smk37",
    "upstream": "https://github.com/risseraka/fm1-tracker-ketch",
-   "fm1": "ketch",
    "package": "https://genkigenki.github.io/smk37/firmware/ketch-0.1.fwsc",
    "installer": "https://genkigenki.github.io/smk37/"
   },

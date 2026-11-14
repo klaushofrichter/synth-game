@@ -47,7 +47,9 @@ def catalog(device):
 
 
 def note_404(page, label):
+    """A firmware site's 404, or a download the browser refuses (a site without CORS headers), on that page."""
     page.on("response", lambda r: r.status == 404 and not r.url.startswith(BASE) and outside_404.append((label, r.url)))
+    page.on("requestfailed", lambda r: not r.url.startswith(BASE) and outside_404.append((label, r.url)))
 BOOT_SECS = 90  # a download from the author's site, then the boot
 
 # Where a part of the board sits, to see that facing north turns it in place rather than moving it.
@@ -249,9 +251,11 @@ def main():
     if outside_404:
         print("404 from the firmwares' sites (handled by the game):\n  " + "\n  ".join(f"{l}: {u}" for l, u in outside_404))
     for label, _ in outside_404:
-        i = next((i for i, e in enumerate(errors) if e.startswith(f"{label}:") and "status of 404" in e), None)
+        i = next((i for i, e in enumerate(errors) if e.startswith(f"{label}:") and ("status of 404" in e or "net::ERR_FAILED" in e)), None)
         if i is not None:
             del errors[i]
+    # (the browser's words on such a refused download name the site's URL; the table's own are never refused)
+    errors[:] = [e for e in errors if not ("blocked by CORS policy" in e and BASE not in e.split(" from origin")[0])]
     if errors or problems:
         print("BROWSER ERRORS:\n" + "\n".join(errors) if errors else "", "\nLAYOUT PROBLEMS:\n" + "\n".join(problems) if problems else "")
         sys.exit(1)

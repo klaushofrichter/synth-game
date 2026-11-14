@@ -123,3 +123,12 @@ Records are history: an older record is not edited when a newer one changes it. 
   Firmware Hub (2026-11-13); Klaus wanted it gone from the list without anyone keeping a list of such firmwares.
   Known gap: when an SMK-37 package goes, upstream's fallback scrapes the shared install page and may take another
   firmware's package (issue #11), so such a firmware stays listed until that is fixed upstream.
+- **E-017 · 2026-11-14 · Klaus** — The firmware versions are kept current by merging upstream, not by running the
+  catalog tools here. Upstream refreshes its catalogs every day (`tools/catalog_refresh.py`): it plays each new or
+  moved package in the emulator and holds back what fails (VIBE FM Link 0.4 crashes), which a raw `hub_catalog.mjs`
+  run here would not; the game's catalogs are made from upstream's (`tools/build_game.sh`). In between, an FM-1
+  firmware whose package the Hub replaced is still played in its newer version (upstream's Hub fallback). Added to
+  E-016: a firmware whose site gives the browser no answer while other sites do is left out too (MIKU-FM's package is
+  on GitHub's release downloads, which refuse other sites' pages: no browser can download it, upstream's page
+  neither); with no answer from any site (no internet) nothing is left out. *Why:* Klaus: "We need to keep the
+  versions of the firmware current." The merge of 2026-11-14 took the FM-1 list from 157 to 201 firmwares.

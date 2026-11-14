@@ -163,6 +163,28 @@ describe("firmwares whose packages are gone (E-016)", () => {
     expect(asked.filter((a) => a.endsWith(".fwsc")).every((a) => a.startsWith("HEAD "))).toBe(true);
   });
 
+  it("include one whose site gives no answer while others do, but none when nothing answers", async () => {
+    // @ts-expect-error: a plain module of the game's UIs
+    const { loadCatalog } = await import("../games/fm1-synth/assets/catalog.js");
+    const lists: Record<string, object> = {
+      "/emu/firmwares-fm1.json": { default: "a", firmwares: [{ id: "a", package: "https://a.test/here.fwsc" }, { id: "x", package: "https://b.test/x.fwsc" }] },
+      "/emu/firmwares-smk37.json": { default: "y", firmwares: [{ id: "y", package: "https://b.test/y.fwsc" }] },
+    };
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init?: { method?: string }) =>
+      lists[url] ? new Response(JSON.stringify(lists[url])) : fakeFetch(url, init)) as typeof fetch;
+    try {
+      const fm1 = await loadCatalog((p: string) => `/${p}`, "fm1");
+      await fm1.checked;
+      expect([...fm1.gone]).toEqual(["x"]);
+      const smk = await loadCatalog((p: string) => `/${p}`, "smk37");
+      await smk.checked;
+      expect([...smk.gone]).toEqual([]);
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
   it("are left out of the lists, also when starred", async () => {
     // @ts-expect-error: a plain module of the game's UIs
     const { orderedIds } = await import("../games/fm1-synth/assets/catalog.js");
