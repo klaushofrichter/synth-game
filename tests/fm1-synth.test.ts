@@ -193,3 +193,161 @@ describe("firmwares whose packages are gone (E-016)", () => {
     expect(orderedIds(catalog, ["b", "c"])).toEqual(["c", "a"]);
   });
 });
+
+describe("the rules' edges", () => {
+  it("cleans what the board and the phone send: control characters out, long words cut", () => {
+    const { rt } = start(game, 1, {}, 1, one());
+    rt.submit(0, { name: "firmware", payload: { id: "a", name: "Al\u0007pha" + "x".repeat(200) } }, "board");
+    expect((rt.boardView() as any).firmwareName).toBe("Al pha" + "x".repeat(74));
+    rt.submit(0, { name: "status", payload: { state: "running", text: "ok\n" + "y".repeat(300), choice: 1 } }, "board");
+    expect((rt.boardView() as any).status.text).toHaveLength(160);
+    expect((rt.boardView() as any).status.text.startsWith("ok y")).toBe(true);
+    // a firmware without a name goes by its id
+    rt.submit(0, { name: "firmware", payload: { id: "b" } }, "board");
+    expect(rt.boardView()).toMatchObject({ firmwareName: "b", status: { text: "Loading b…" } });
+  });
+
+  it("changes nothing for the same firmware, the same device or the same status again", () => {
+    const { rt } = start(game, 1, {}, 1, one());
+    rt.submit(0, { name: "firmware", payload: { id: "a", name: "A" } }, "board");
+    const before = rt.boardView();
+    expect(rt.submit(0, { name: "firmware", payload: { id: "a", name: "A" } }, "human")).toEqual({ ok: true });
+    expect(rt.submit(0, { name: "device", payload: { device: "fm1" } }, "human")).toEqual({ ok: true });
+    expect(rt.boardView()).toEqual(before);
+    rt.submit(0, { name: "status", payload: { state: "running", text: "A runs", choice: 1 } }, "board");
+    const running = rt.boardView();
+    rt.submit(0, { name: "status", payload: { state: "running", text: "A runs", choice: 1 } }, "board");
+    expect(rt.boardView()).toEqual(running);
+    // played once, however often chosen
+    rt.submit(0, { name: "firmware", payload: { id: "b", name: "B" } }, "board");
+    rt.submit(0, { name: "firmware", payload: { id: "a", name: "A" } }, "board");
+    rt.submit(0, { name: "finish", payload: {} }, "human");
+    expect((game.def.isOver(rt.state) as any).highlights.firmwares).toEqual(["fm1/a", "fm1/b"]);
+  });
+
+  it("refuses everything once the session is over", () => {
+    const { rt } = start(game, 1, {}, 1, one());
+    rt.submit(0, { name: "finish", payload: {} }, "human");
+    for (const intent of [
+      { name: "firmware", payload: { id: "a" } },
+      { name: "star", payload: { device: "fm1", id: "a", on: true } },
+      { name: "finish", payload: {} },
+    ]) {
+      const r = rt.submit(0, intent, "human");
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it("sums up a session where nothing was played, and short ones without minutes", () => {
+    const { rt } = start(game, 1, { device: "smk37" }, 1, one());
+    rt.submit(0, { name: "finish", payload: {} }, "human");
+    const over = game.def.isOver(rt.state) as any;
+    expect(over.text).toBe("Ann played the SMK-37.");
+    expect(over.highlights).toEqual({ devices: [], firmwares: [], minutes: 0 });
+    expect(over.table).toEqual({ columns: ["Player", "Firmwares", "Minutes"], rows: [["Ann", 0, 0]] });
+  });
+
+  it("keeps at most 200 stars per device, the newest", () => {
+    const { rt } = start(game, 1, {}, 1, one());
+    const many = Array.from({ length: 250 }, (_, i) => `f${i}`);
+    rt.submit(0, { name: "favorites", payload: { list: { fm1: many } } }, "human");
+    expect((rt.boardView() as any).favorites.fm1).toEqual(many.slice(0, 200));
+    rt.submit(0, { name: "star", payload: { device: "fm1", id: "new", on: true } }, "board");
+    const fm1 = (rt.boardView() as any).favorites.fm1;
+    expect(fm1).toHaveLength(200);
+    expect(fm1[0]).toBe("new");
+    expect(fm1.at(-1)).toBe("f198");
+    // a star off for one not starred changes nothing
+    expect(rt.submit(0, { name: "star", payload: { device: "smk37", id: "x", on: false } }, "board")).toEqual({ ok: true });
+  });
+
+  it("describes each step for the statistics in words", () => {
+    const d = game.def.describe!;
+    const step = (name: string, payload: object, accepted = true, after: object = {}) =>
+      d({ kind: "intent", intent: { name, payload }, accepted, after: { device: "fm1", firmwareName: "Alpha", status: { state: "running", text: "" }, ...after } } as any);
+    expect(step("firmware", { id: "a" })).toEqual({ text: "picks Alpha" });
+    expect(step("firmware", { id: "a" }, false)).toEqual({ text: "tries to pick a firmware" });
+    expect(step("device", { device: "smk37" }, true, { device: "smk37" })).toEqual({ text: "switches to the SMK-37" });
+    expect(step("status", {}, true, { status: { state: "error", text: "" } })).toEqual({ text: "board: error" });
+    expect(step("status", {}, true, { status: { state: "running", text: "Alpha runs" } })).toEqual({ text: "board: Alpha runs" });
+    expect(step("star", { id: "a", on: true })).toEqual({ text: "stars a" });
+    expect(step("star", { id: "a", on: false })).toEqual({ text: "unstars a" });
+    expect(step("finish", {})).toEqual({ text: "is done playing" });
+    expect(step("favorites", {})).toBe(null);
+    expect(d({ kind: "timer" } as any)).toBe(null);
+  });
+});
+
+describe("the shared catalog module", () => {
+  const LIST = { default: "b", firmwares: [{ id: "a", package: "https://c.test/a.fwsc" }, { id: "b", package: "https://c.test/b.fwsc" }] };
+
+  it("loads a device's list once per page, again after a failure, and asks about its first firmware first", async () => {
+    const mod = "../games/fm1-synth/assets/catalog.js?once"; // (its own copy: an earlier test loaded the FM-1's list)
+    const { loadCatalog, loadedCatalog, deviceName, noFavorites } = await import(mod);
+    const asked: string[] = [];
+    let fail = true;
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init?: { method?: string }) => {
+      asked.push(`${init?.method ?? "GET"} ${url}`);
+      if (url.endsWith(".json")) return fail ? new Response("", { status: 503 }) : new Response(JSON.stringify(LIST));
+      return new Response(null, { status: 200 });
+    }) as typeof fetch;
+    try {
+      await expect(loadCatalog((p: string) => `/${p}`, "fm1")).rejects.toThrow("the FM-1's firmware list could not be loaded (503)");
+      expect(loadedCatalog("fm1")).toBe(undefined);
+      fail = false;
+      const c = await loadCatalog((p: string) => `/${p}`, "fm1");
+      expect(await loadCatalog((p: string) => `/${p}`, "fm1")).toBe(c);
+      expect(loadedCatalog("fm1")).toBe(c);
+      expect(asked.filter((a) => a.endsWith(".json"))).toHaveLength(2);
+      await c.checked;
+      expect(asked.filter((a) => a.endsWith(".fwsc"))).toEqual(["HEAD https://c.test/b.fwsc", "HEAD https://c.test/a.fwsc"]);
+      expect(await c.check("a")).toBe("ok");
+      expect(await c.check("nope")).toBe("unknown");
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(deviceName("smk37")).toBe("SMK-37");
+    expect(deviceName("tr808")).toBe("tr808");
+    expect(noFavorites()).toEqual({ fm1: [], smk37: [] });
+  });
+});
+
+describe("asking about a package", () => {
+  it("tries the first byte where a site refuses HEAD, and takes 410 as gone", async () => {
+    // @ts-expect-error: a plain module of the game's UIs
+    const { availability, eachLimited } = await import("../games/fm1-synth/assets/packages.js");
+    const asked: string[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = (async (url: string, init?: { method?: string; headers?: Record<string, string> }) => {
+      asked.push(`${init?.method ?? "GET"}${init?.headers?.Range ? " range" : ""} ${url}`);
+      if (url.includes("nohead")) return new Response(init?.method === "HEAD" ? null : "x", { status: init?.method === "HEAD" ? 405 : 206 });
+      if (url.includes("removed")) return new Response(null, { status: 410 });
+      if (url.includes("install")) return new Response(null, { status: init?.method === "HEAD" ? 200 : 500 });
+      return new Response(null, { status: 404 });
+    }) as typeof fetch;
+    try {
+      expect(await availability({ id: "n", package: "https://d.test/nohead.fwsc" })).toBe("ok");
+      expect(asked).toEqual(["HEAD https://d.test/nohead.fwsc", "GET range https://d.test/nohead.fwsc"]);
+      expect(await availability({ id: "r", package: "https://d.test/removed.fwsc" })).toBe("gone");
+      // a package inside its install page: only the page is asked about, not downloaded
+      asked.length = 0;
+      expect(await availability({ id: "e", embedded: "FW", installer: "https://d.test/install/" })).toBe("ok");
+      expect(asked).toEqual(["HEAD https://d.test/install/"]);
+      expect(await availability({ id: "e", embedded: "FW", installer: "https://d.test/gone/" })).toBe("gone");
+    } finally {
+      globalThis.fetch = real;
+    }
+    // at most n at a time, every item once
+    let running = 0, most = 0;
+    const done: number[] = [];
+    await eachLimited([1, 2, 3, 4, 5, 6, 7], 3, async (i: number) => {
+      most = Math.max(most, ++running);
+      await new Promise((r) => setTimeout(r, 5));
+      running--;
+      done.push(i);
+    });
+    expect(most).toBe(3);
+    expect(done.sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+});
