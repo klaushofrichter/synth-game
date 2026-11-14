@@ -86,6 +86,7 @@ export function mount(root, ctx) {
   let pickerDevice = null; // the device whose firmwares the picker shows
   let pickerOrder = null; // { device, ids }: the order of the window's list, fixed while it is open (E-013)
   let pickerRows = ""; // the window's list as drawn
+  const redrawn = new Set(); // devices whose list is drawn again once their packages are checked
   const shown = () => pickerDevice ?? view?.device ?? "fm1";
   let defaultAsked = -1; // the choice for which the device's first firmware was asked for (once)
   // Firmwares whose package could not be downloaded on this board (`device/id`), the choice the board made itself (a
@@ -123,17 +124,19 @@ export function mount(root, ctx) {
     ctx.act(playerSeat(), "status", { state, text, choice: view.choice });
   }
 
-  /** The device's first firmware the board can still try: its default, then the list's order. */
-  function firstAvailable(c) {
-    return [c.default, ...c.firmwares.map((f) => f.id)].map((id) => c.byId.get(id)).find((f) => f && !unavailable.has(`${c.device}/${f.id}`));
-  }
-
-  /** The board's own choice of a firmware for the device (its first, or the next when one is not available). */
-  function chooseFor(c) {
-    const f = firstAvailable(c);
-    if (!f) return report("error", `No firmware for the ${deviceName(c.device)} can be downloaded right now. Check the table's internet connection.`);
-    autoChoice = view.choice + 1;
-    ctx.act(playerSeat(), "firmware", { id: f.id, name: f.name, device: c.device });
+  /**
+   * The board's own choice of a firmware for the device: its first, or the next in the list when one's package is gone
+   * (its site says so, E-016) or could not be downloaded here (E-015).
+   */
+  async function chooseFor(c) {
+    const choice = view.choice;
+    for (const f of [c.byId.get(c.default), ...c.firmwares]) {
+      if (!f || unavailable.has(`${c.device}/${f.id}`) || (await c.check(f.id)) === "gone") continue;
+      if (dead || view.choice !== choice) return; // (chosen otherwise meanwhile)
+      autoChoice = choice + 1;
+      return ctx.act(playerSeat(), "firmware", { id: f.id, name: f.name, device: c.device });
+    }
+    report("error", `No firmware for the ${deviceName(c.device)} can be downloaded right now. Check the table's internet connection.`);
   }
 
   /** How the firmware runs, from the synth: an unavailable package the board chose itself makes way for the next. */
@@ -229,14 +232,17 @@ export function mount(root, ctx) {
       return;
     }
     if (device !== shown()) return; // another tab was tapped meanwhile
+    if (!redrawn.has(device)) {
+      redrawn.add(device);
+      catalog.checked.then(() => !picker.hidden && shown() === device && renderPicker());
+    }
     const here = device === view?.device;
     // the order is taken when the window opens on a device, so a star does not move the card under the finger
     if (pickerOrder?.device !== device) pickerOrder = { device, ids: orderedIds(catalog, view?.favorites?.[device]) };
     const stars = new Set(view?.favorites?.[device] ?? []);
-    $(".fs-sheet-title").textContent = `Firmwares for the ${deviceName(device)} (${catalog.firmwares.length})`;
-    const rows = pickerOrder.ids
-      .map((id) => catalog.byId.get(id))
-      .filter(Boolean)
+    const firmwares = pickerOrder.ids.filter((id) => !catalog.gone.has(id)).map((id) => catalog.byId.get(id));
+    $(".fs-sheet-title").textContent = `Firmwares for the ${deviceName(device)} (${firmwares.length})`;
+    const rows = firmwares
       .map((f) => {
         const on = stars.has(f.id);
         const gone = unavailable.has(`${device}/${f.id}`);

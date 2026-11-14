@@ -53,6 +53,7 @@ export function mount(root, ctx) {
     try {
       const c = await loadCatalog(ctx.assetUrl, dev);
       if (device === dev) catalog = c; // (not when another device was chosen meanwhile)
+      c.checked.then(draw); // (without the firmwares that are gone, E-016)
     } catch {
       if (device === dev) {
         failed = true;
@@ -78,8 +79,8 @@ export function mount(root, ctx) {
     // starred first, newest star first; a star given here moves the row only the next time
     if (order?.synced !== view.favSynced || order.catalog !== catalog) order = { synced: view.favSynced, catalog, ids: orderedIds(catalog, stars) };
     const html = order.ids
+      .filter((id) => !catalog.gone.has(id))
       .map((id) => catalog.byId.get(id))
-      .filter(Boolean)
       .map((f) => {
         const on = stars.includes(f.id);
         return `<div class="fd-row"><button type="button" class="fd-fw ${f.id === view.firmware ? "on" : ""}" data-id="${esc(f.id)}" data-name="${esc(f.name)}"
