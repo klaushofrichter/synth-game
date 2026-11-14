@@ -107,6 +107,28 @@ Records are history: an older record is not edited when a newer one changes it. 
   - a firmware list or the emulator that cannot be loaded says so on the board (Restart tries again), the phone says
     so in its list and asks again by itself, and stars of firmwares no longer listed are passed over;
   - `scripts/check-packages.mjs` tries every listed package (and the Hub's newer one where upstream falls back to
-    it): a warning on a pull request, a failure on the weekly run.
+    it): a warning on a pull request, a failure on the weekly run (only warnings since E-016).
   *Why:* a table found out first: its SMK-37 started on a firmware whose package had gone, and stayed silent.
 
+- **E-016 · 2026-11-14 · Klaus** — Firmwares whose packages are gone are left out, found by asking, not by a list.
+  The board and the phone ask about every listed firmware's package once per page, in the background
+  (`assets/packages.js`: upstream's download with its fallbacks, a HEAD request per package, eight at a time, the
+  device's first firmware first). A firmware whose site says its package is not there, with no fallback that has it,
+  is left out of the board's window and the phone's list (also when starred); the board's own choice of a device's
+  first firmware passes over it without a word. No answer at all (no internet) leaves a firmware listed, and one
+  that is listed but then fails to download is still handled as in E-015. The game's code and its browser check
+  name no firmware (the check reads them from the catalogs); the catalogs stay upstream's, and the SMK-37's
+  first firmware (Erik37, E-005) stays the one deliberate choice. `scripts/check-packages.mjs` says which ones are
+  left out, as a warning only, also on the weekly run (it no longer fails it). *Why:* Ketch's package left the
+  Firmware Hub (2026-11-13); Klaus wanted it gone from the list without anyone keeping a list of such firmwares.
+  Known gap: when an SMK-37 package goes, upstream's fallback scrapes the shared install page and may take another
+  firmware's package (issue #11), so such a firmware stays listed until that is fixed upstream.
+- **E-017 · 2026-11-14 · Klaus** — The firmware versions are kept current by merging upstream, not by running the
+  catalog tools here. Upstream refreshes its catalogs every day (`tools/catalog_refresh.py`): it plays each new or
+  moved package in the emulator and holds back what fails (VIBE FM Link 0.4 crashes), which a raw `hub_catalog.mjs`
+  run here would not; the game's catalogs are made from upstream's (`tools/build_game.sh`). In between, an FM-1
+  firmware whose package the Hub replaced is still played in its newer version (upstream's Hub fallback). Added to
+  E-016: a firmware whose site gives the browser no answer while other sites do is left out too (MIKU-FM's package is
+  on GitHub's release downloads, which refuse other sites' pages: no browser can download it, upstream's page
+  neither); with no answer from any site (no internet) nothing is left out. *Why:* Klaus: "We need to keep the
+  versions of the firmware current." The merge of 2026-11-14 took the FM-1 list from 157 to 201 firmwares.

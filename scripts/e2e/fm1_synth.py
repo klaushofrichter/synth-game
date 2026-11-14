@@ -10,12 +10,13 @@ Checks on the way:
   - a star in the firmware window puts that firmware first the next time it opens, and the phone keeps it (E-013);
   - the firmware window's SMK-37 tab switches the board to the SMK-37 (E-006, E-011); when its first firmware cannot
     be downloaded, the board plays the next one and says so, marks it in the window, and a tap tries it again (E-015);
+    a firmware whose package is gone is left out of the board's window and the phone's list (E-016);
   - the phone switches the device back; facing north turns the bar, the panel and the seat plate in place (E-007,
     E-008) without moving them;
   - Finish asks first: Keep playing goes back to the game; Finish ends it with a summary naming what was played.
 
 The firmwares come from their authors' sites (thefirmwarehub.com, genkigenki.github.io), so this check needs the
-internet, as a table does. Starts its own Table Host from .games-service with GAMES_DIR pointing at this repo's games/.
+internet, as a table does; which ones it plays comes from the game's catalogs, not from this check. Starts its own Table Host from .games-service with GAMES_DIR pointing at this repo's games/.
   python3 scripts/e2e/fm1_synth.py out/
 """
 import json, os, sys, time
@@ -34,9 +35,21 @@ BASE = f"http://127.0.0.1:{PORT}"
 KEY = "e2ekey"
 T = TableCheck(BASE, KEY, OUT, "fm1-synth", CHECK)
 a, shot, check, phone, problems = T.a, T.shot, T.check, T.phone, T.problems
-# 404s from the firmwares' sites: a package that is gone (or refused here on purpose) is the game's to handle (E-015),
-# so the browser's console message about each is expected; a 404 from the table itself is not.
-outside_404 = []
+# 404s from the firmwares' sites: a package that is gone (or refused here on purpose) is the game's to handle (E-015,
+# E-016), so the browser's console message about each is expected; a 404 from the table itself is not.
+outside_404 = []  # (page label, url)
+EMU = os.path.join(ROOT, "games", "fm1-synth", "assets", "emu")
+
+
+def catalog(device):
+    with open(os.path.join(EMU, f"firmwares-{device}.json")) as fh:
+        return json.load(fh)
+
+
+def note_404(page, label):
+    """A firmware site's 404, or a download the browser refuses (a site without CORS headers), on that page."""
+    page.on("response", lambda r: r.status == 404 and not r.url.startswith(BASE) and outside_404.append((label, r.url)))
+    page.on("requestfailed", lambda r: not r.url.startswith(BASE) and outside_404.append((label, r.url)))
 BOOT_SECS = 90  # a download from the author's site, then the boot
 
 # Where a part of the board sits, to see that facing north turns it in place rather than moving it.
@@ -53,8 +66,14 @@ def status(board):
     return board.locator(".fs-status").inner_text()
 
 
-def wait_running(board, deck, name):
-    """The board says `name` runs, and so does the phone; a download or boot error fails at once with its words."""
+def playing(board):
+    """The firmware the board names ("FM-1 · Felucca" -> "Felucca")."""
+    return board.locator(".fs-name").inner_text().split(" · ", 1)[-1]
+
+
+def wait_running(board, deck, name=None):
+    """The board says `name` (or any firmware) runs, and so does the phone, and names it; a download or boot error
+    fails at once with its words."""
     def check_state():
         s = status(board)
         if "running" in s:
@@ -63,11 +82,14 @@ def wait_running(board, deck, name):
             raise AssertionError(f"the board reports an error: {s}")
         return None
     try:
-        wait(lambda: name in board.locator(".fs-name").inner_text() and check_state(), BOOT_SECS, f"{name} to run on the board")
+        wait(lambda: (name is None or name in board.locator(".fs-name").inner_text()) and check_state(), BOOT_SECS,
+             f"{name or 'a firmware'} to run on the board")
+        name = name or playing(board)
     except AssertionError as e:
         raise AssertionError(f"{e}; the board shows {board.locator('.fs-name').inner_text()!r}: {status(board)!r}") from None
     wait(lambda: name in deck.locator(".fd-name").inner_text() and "running" in deck.locator(".fd-text").inner_text(), 10,
          f"the phone to show {name} running")
+    return name
 
 
 def touch(board, fx, fy, pid, kind):
@@ -85,10 +107,11 @@ def main():
             browser = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
             board = browser.new_context(viewport={"width": 1920, "height": 1080}, has_touch=True).new_page()
             watch(board, "board")
-            board.on("response", lambda r: r.status == 404 and not r.url.startswith(BASE) and outside_404.append(r.url))
+            note_404(board, "board")
             board.goto(BASE + "/board/")
             board.wait_for_selector("button.tile")
             deck = phone(browser, "Klaus", 320, 568)
+            note_404(deck, "Klaus")
             pick_game(board, "fm1-synth")
             board.locator(".dialog [data-x=yes]").click()  # Device to start with: FM-1, the default
             time.sleep(0.4)
@@ -103,7 +126,8 @@ def main():
             board.wait_for_selector(".fs-panel")
             if deck.locator("#tab-game").count():
                 deck.locator("#tab-game").click()
-            wait_running(board, deck, "Felucca")
+            # (the FM-1's first firmware, or the next when its package is gone)
+            fm1_first = wait_running(board, deck)
             wait(lambda: board.evaluate(DRAWN), 10, "the panel to be drawn")
             assert board.locator(".fs-tap").is_hidden(), "the board asks for a tap although its sound may play"
             shot(board, "board-fm1")
@@ -128,7 +152,7 @@ def main():
             board.tap(f".fs-card[data-id='{fav}'] .fs-star")
             wait(lambda: board.locator(f".fs-card[data-id='{fav}'] .fs-star.starred").count(), 10, "the star on the board")
             assert board.locator(".fs-card").nth(2).get_attribute("data-id") == fav, "the starred card moved while open"
-            assert "Felucca" in status(board), "a star changed the firmware"
+            assert playing(board) == fm1_first, "a star changed the firmware"
             board.click(".fs-close")
             board.click(".fs-pick")
             wait(lambda: board.locator(".fs-card").first.get_attribute("data-id") == fav, 10, f"{fav} first in the window")
@@ -144,28 +168,44 @@ def main():
             board.wait_for_selector(".fs-picker:not([hidden]) .fs-card")
             assert board.locator(".fs-tab").all_inner_texts() == ["FM-1", "SMK-37"]
             assert "FM-1" in board.inner_text(".fs-sheet-title")
-            # Erik37's package is gone from its author's site, for now: the board passes over it.
-            with open(os.path.join(ROOT, "games", "fm1-synth", "assets", "emu", "firmwares-smk37.json")) as fh:
-                smk = json.load(fh)
-            nxt = next(f for f in smk["firmwares"] if f["id"] != smk["default"])
-            # (its install page too: upstream's fallback would look there for a package, and take another firmware's, #11)
+            # The SMK-37's first firmware cannot be downloaded right now (its site refuses the download, but still
+            # answers that the package is there): the board passes over it. Another one's package is gone: it is
+            # left out of the lists.
+            smk = catalog("smk37")
+            first = next(f for f in smk["firmwares"] if f["id"] == smk["default"])
+            hidden = smk["firmwares"][-1]
+            assert hidden["id"] != first["id"]
+            def refused(route):
+                if route.request.method == "GET":
+                    return route.fulfill(status=404, body="gone")
+                route.continue_()
             def gone(route):
                 route.fulfill(status=404, body="gone")
-            board.context.route("**/erik37-*.fwsc", gone)
-            board.context.route("https://genkigenki.github.io/smk37/", gone)
+            # (its install page too: upstream's fallback would look there for a package, and take another firmware's, #11)
+            blocked = [first["package"]] + ([first["installer"]] if first.get("installer") else [])
+            for url in blocked:
+                board.context.route(url, refused)
+            for page in (board, deck):
+                for url in [hidden["package"]] + ([hidden["installer"]] if hidden.get("installer") else []):
+                    page.context.route(url, gone)
             board.tap(".fs-tab[data-device=smk37]")
             wait(lambda: "SMK-37" in board.inner_text(".fs-sheet-title"), 10, "the SMK-37 list")
-            wait_running(board, deck, nxt["name"])
-            assert "Erik37 can't be downloaded" in status(board), status(board)
-            wait(lambda: board.locator(".fs-card.gone[data-id=erik37]").count(), 10, "Erik37 marked as not available")
+            nxt = wait_running(board, deck)
+            assert nxt != first["name"] and f"{first['name']} can't be downloaded" in status(board), status(board)
+            wait(lambda: board.locator(f".fs-card.gone[data-id='{first['id']}']").count(), 10, f"{first['name']} marked as not available")
+            board.click(".fs-close")
+            board.click(".fs-pick")
+            for page, card in ((board, ".fs-card"), (deck, ".fd-fw")):
+                wait(lambda: page.locator(card).count() and not page.locator(f"{card}[data-id='{hidden['id']}']").count(), 15,
+                     f"{hidden['name']} left out on {page.label if hasattr(page, 'label') else 'the board'}")
             shot(board, "picker-unavailable")
             # back on its site: a tap on it tries again
-            board.context.unroute("**/erik37-*.fwsc")
-            board.context.unroute("https://genkigenki.github.io/smk37/")
-            board.tap(".fs-card[data-id=erik37]")
-            wait_running(board, deck, "Erik37")
+            for url in blocked:
+                board.context.unroute(url)
+            board.tap(f".fs-card[data-id='{first['id']}']")
+            wait_running(board, deck, first["name"])
             board.click(".fs-pick")
-            wait(lambda: board.locator(".fs-card.on[data-id=erik37]:not(.gone)").count(), 10, "Erik37 marked in the window")
+            wait(lambda: board.locator(f".fs-card.on[data-id='{first['id']}']:not(.gone)").count(), 10, f"{first['name']} marked in the window")
             assert board.locator(".fs-tab[data-device=smk37]").get_attribute("aria-selected") == "true"
             shot(board, "picker-smk37")
             board.click(".fs-close")
@@ -175,7 +215,7 @@ def main():
 
             # The phone switches back to the FM-1, on its first firmware again.
             deck.click(".fd-dev-btn[data-device=fm1]")
-            wait_running(board, deck, "Felucca")
+            wait_running(board, deck, fm1_first)
 
             # Facing north: the bar, the panel and the seat plate turn in place; nothing moves (E-007, E-008).
             places = {s: board.evaluate(BOX, s) for s in (".fs-bar", ".fs-frame", ".kit-plate")}
@@ -201,7 +241,7 @@ def main():
             deck.click(".fd-end")
             wait(lambda: a("GET", "/state")["phase"] == "finished", 15, "the game to finish")
             summary = a("GET", "/state")["summary"]["text"]
-            for part in ("Klaus played", "Felucca", "on the FM-1", "Erik37", "on the SMK-37"):
+            for part in ("Klaus played", fm1_first, "on the FM-1", nxt, first["name"], "on the SMK-37"):
                 assert part in summary, f"{part!r} missing in the summary: {summary}"
             time.sleep(0.6)
             shot(board, "board-final")
@@ -209,11 +249,13 @@ def main():
     finally:
         proc.terminate()
     if outside_404:
-        print("404 from the firmwares' sites (handled by the game):\n  " + "\n  ".join(outside_404))
-    for _ in outside_404:
-        i = next((i for i, e in enumerate(errors) if e.startswith("board:") and "status of 404" in e), None)
+        print("404 from the firmwares' sites (handled by the game):\n  " + "\n  ".join(f"{l}: {u}" for l, u in outside_404))
+    for label, _ in outside_404:
+        i = next((i for i, e in enumerate(errors) if e.startswith(f"{label}:") and ("status of 404" in e or "net::ERR_FAILED" in e)), None)
         if i is not None:
             del errors[i]
+    # (the browser's words on such a refused download name the site's URL; the table's own are never refused)
+    errors[:] = [e for e in errors if not ("blocked by CORS policy" in e and BASE not in e.split(" from origin")[0])]
     if errors or problems:
         print("BROWSER ERRORS:\n" + "\n".join(errors) if errors else "", "\nLAYOUT PROBLEMS:\n" + "\n".join(problems) if problems else "")
         sys.exit(1)

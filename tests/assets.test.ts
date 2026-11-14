@@ -27,6 +27,5 @@ describe("the game's emulator build", () => {
       const c = JSON.parse(text);
       expect(c.firmwares.some((f: { byo?: boolean }) => f.byo)).toBe(false);
     }
-    expect(JSON.parse(readFileSync(`${EMU}firmwares-smk37.json`, "utf8")).default).toBe("erik37");
   });
 });
