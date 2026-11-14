@@ -33,8 +33,10 @@ export function loadCatalog(assetUrl, device) {
 
 /**
  * Every firmware's package is asked about once per page, in the background, the device's first firmware first (E-016):
- * `cat.check(id)` says how one stands ("ok", "gone", "unknown"), `cat.gone` holds those whose sites say they are gone,
- * and `cat.checked` settles when all are asked. A firmware without an answer (no internet) stays listed.
+ * `cat.check(id)` says how one stands ("ok", "gone", "unknown"), `cat.gone` holds those that cannot be had, and
+ * `cat.checked` settles when all are asked. Gone: its site says the package is not there, or its site gives this
+ * browser no answer while others do (a site that refuses other pages' downloads, CORS). Without any answer (no
+ * internet) every firmware stays listed.
  */
 function startChecks(cat) {
   const answers = new Map(); // id -> Promise<"ok" | "gone" | "unknown">
@@ -43,10 +45,16 @@ function startChecks(cat) {
   cat.check = (id) => answers.get(id) ?? Promise.resolve("unknown");
   for (const f of cat.firmwares) answers.set(f.id, new Promise((resolve) => waiting.set(f.id, resolve)));
   const order = [cat.byId.get(cat.default), ...cat.firmwares].filter((f, i, all) => f && all.indexOf(f) === i);
+  const noAnswer = [];
+  let answered = false;
   cat.checked = eachLimited(order, 8, async (f) => {
     const a = await availability(f);
     if (a === "gone") cat.gone.add(f.id);
+    if (a === "unknown") noAnswer.push(f.id);
+    else answered = true;
     waiting.get(f.id)(a);
+  }).then(() => {
+    if (answered) for (const id of noAnswer) cat.gone.add(id);
   });
 }
 
