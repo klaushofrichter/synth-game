@@ -8,7 +8,8 @@ Checks on the way:
     the board and on the phone; the panel is drawn; a touch on a key lights it;
   - the phone layout rules of games-service (D-065);
   - a star in the firmware window puts that firmware first the next time it opens, and the phone keeps it (E-013);
-  - the firmware window's SMK-37 tab switches the board to the SMK-37, on its first firmware (E-006, E-011);
+  - the firmware window's SMK-37 tab switches the board to the SMK-37 (E-006, E-011); when its first firmware cannot
+    be downloaded, the board plays the next one and says so, marks it in the window, and a tap tries it again (E-015);
   - the phone switches the device back; facing north turns the bar, the panel and the seat plate in place (E-007,
     E-008) without moving them;
   - Finish asks first: Keep playing goes back to the game; Finish ends it with a summary naming what was played.
@@ -17,7 +18,7 @@ The firmwares come from their authors' sites (thefirmwarehub.com, genkigenki.git
 internet, as a table does. Starts its own Table Host from .games-service with GAMES_DIR pointing at this repo's games/.
   python3 scripts/e2e/fm1_synth.py out/
 """
-import os, sys, time
+import json, os, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -58,8 +59,10 @@ def wait_running(board, deck, name):
         if board.locator(".fs-dot[data-state=error]").count():
             raise AssertionError(f"the board reports an error: {s}")
         return None
-    wait(check_state, BOOT_SECS, f"{name} to run on the board")
-    assert name in board.locator(".fs-name").inner_text(), board.locator(".fs-name").inner_text()
+    try:
+        wait(lambda: name in board.locator(".fs-name").inner_text() and check_state(), BOOT_SECS, f"{name} to run on the board")
+    except AssertionError as e:
+        raise AssertionError(f"{e}; the board shows {board.locator('.fs-name').inner_text()!r}: {status(board)!r}") from None
     wait(lambda: name in deck.locator(".fd-name").inner_text() and "running" in deck.locator(".fd-text").inner_text(), 10,
          f"the phone to show {name} running")
 
@@ -137,10 +140,30 @@ def main():
             board.wait_for_selector(".fs-picker:not([hidden]) .fs-card")
             assert board.locator(".fs-tab").all_inner_texts() == ["FM-1", "SMK-37"]
             assert "FM-1" in board.inner_text(".fs-sheet-title")
+            # Erik37's package is gone from its author's site, for now: the board passes over it.
+            with open(os.path.join(ROOT, "games", "fm1-synth", "assets", "emu", "firmwares-smk37.json")) as fh:
+                smk = json.load(fh)
+            nxt = next(f for f in smk["firmwares"] if f["id"] != smk["default"])
+            # (its install page too: upstream's fallback would look there for a package, and take another firmware's, #11)
+            gone = lambda route: route.fulfill(status=404, body="gone")
+            board.context.route("**/erik37-*.fwsc", gone)
+            board.context.route("https://genkigenki.github.io/smk37/", gone)
+            seen = len(errors)
             board.tap(".fs-tab[data-device=smk37]")
             wait(lambda: "SMK-37" in board.inner_text(".fs-sheet-title"), 10, "the SMK-37 list")
+            wait_running(board, deck, nxt["name"])
+            assert "Erik37 can't be downloaded" in status(board), status(board)
+            wait(lambda: board.locator(".fs-card.gone[data-id=erik37]").count(), 10, "Erik37 marked as not available")
+            shot(board, "picker-unavailable")
+            # back on its site: a tap on it tries again
+            board.context.unroute("**/erik37-*.fwsc")
+            board.context.unroute("https://genkigenki.github.io/smk37/")
+            # the browser's own words about those refused downloads are expected; anything else is not
+            errors[seen:] = [e for e in errors[seen:] if "status of 404" not in e]
+            board.tap(".fs-card[data-id=erik37]")
             wait_running(board, deck, "Erik37")
-            wait(lambda: board.locator(".fs-card.on[data-id=erik37]").count(), 10, "Erik37 marked in the window")
+            board.click(".fs-pick")
+            wait(lambda: board.locator(".fs-card.on[data-id=erik37]:not(.gone)").count(), 10, "Erik37 marked in the window")
             assert board.locator(".fs-tab[data-device=smk37]").get_attribute("aria-selected") == "true"
             shot(board, "picker-smk37")
             board.click(".fs-close")
@@ -193,6 +216,8 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
+        if errors:
+            print("BROWSER ERRORS:\n" + "\n".join(errors[:10]))
         # On GitHub, an annotation carries the reason to the PR page, where the job log may not be at hand.
         if os.environ.get("GITHUB_ACTIONS"):
             print(f"::error file=scripts/e2e/fm1_synth.py::{type(e).__name__}: {str(e)[:900]}".replace("\n", " "))

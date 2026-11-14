@@ -2,10 +2,9 @@
 // how it runs, a firmware picker) and the platform's seat plate below. The emulator runs only on the table's own board
 // for the player sitting at it (E-002); a remote board (a watcher) shows the bar and a note instead.
 import { esc, html, seatPlates, useStyles } from "/shared/board-kit.js";
+import { DEVICES, deviceName, loadCatalog as fetchCatalog, loadedCatalog, orderedIds } from "/games/fm1-synth/assets/catalog.js";
 
 const ID = "fm1-synth";
-const DEVICES = [{ id: "fm1", name: "FM-1" }, { id: "smk37", name: "SMK-37" }];
-const deviceName = (d) => (d === "smk37" ? "SMK-37" : "FM-1");
 const CLOCKS = [60, 80, 100, 120, 160, 200, 240];
 const VOLUMES = [0, 20, 40, 60, 80, 100];
 const prefsOf = (info) => ({
@@ -84,10 +83,16 @@ export function mount(root, ctx) {
   const tap = $(".fs-tap");
 
   let info = null, view = null;
-  const catalogs = new Map(); // device -> { device, default, firmwares, byId }
   let pickerDevice = null; // the device whose firmwares the picker shows
   let pickerOrder = null; // { device, ids }: the order of the window's list, fixed while it is open (E-013)
+  let pickerRows = ""; // the window's list as drawn
+  const shown = () => pickerDevice ?? view?.device ?? "fm1";
   let defaultAsked = -1; // the choice for which the device's first firmware was asked for (once)
+  // Firmwares whose package could not be downloaded on this board (`device/id`), the choice the board made itself (a
+  // device's first firmware, or the next one when that is not available), and the firmwares it passed over for it.
+  const unavailable = new Set();
+  let autoChoice = -1;
+  let skipped = [];
   let synth = null, synthLoading = null;
   let booted = -1; // the choice the emulator booted (or is booting)
   let bootedMhz = null;
@@ -107,13 +112,7 @@ export function mount(root, ctx) {
     frame.style.height = `${Math.floor(s)}px`;
   }
 
-  async function loadCatalog(device) {
-    if (catalogs.has(device)) return catalogs.get(device);
-    const c = await (await fetch(ctx.assetUrl(`emu/firmwares-${device}.json`))).json();
-    const cat = { device, ...c, byId: new Map(c.firmwares.map((f) => [f.id, f])) };
-    catalogs.set(device, cat);
-    return cat;
-  }
+  const loadCatalog = (device) => fetchCatalog(ctx.assetUrl, device);
 
   function report(state, text) {
     // (no "loading": the rules set it when a firmware is chosen; every report counts as a move in the statistics)
@@ -124,15 +123,48 @@ export function mount(root, ctx) {
     ctx.act(playerSeat(), "status", { state, text, choice: view.choice });
   }
 
+  /** The device's first firmware the board can still try: its default, then the list's order. */
+  function firstAvailable(c) {
+    return [c.default, ...c.firmwares.map((f) => f.id)].map((id) => c.byId.get(id)).find((f) => f && !unavailable.has(`${c.device}/${f.id}`));
+  }
+
+  /** The board's own choice of a firmware for the device (its first, or the next when one is not available). */
+  function chooseFor(c) {
+    const f = firstAvailable(c);
+    if (!f) return report("error", `No firmware for the ${deviceName(c.device)} can be downloaded right now. Check the table's internet connection.`);
+    autoChoice = view.choice + 1;
+    ctx.act(playerSeat(), "firmware", { id: f.id, name: f.name, device: c.device });
+  }
+
+  /** How the firmware runs, from the synth: an unavailable package the board chose itself makes way for the next. */
+  function status(state, text, problem) {
+    const key = `${view?.device}/${view?.firmware}`;
+    if (state === "running") {
+      unavailable.delete(key);
+      if (booted === autoChoice && skipped.length) text += ` (${skipped.join(", ")} can't be downloaded right now)`;
+    }
+    if (state === "error" && problem?.unavailable) {
+      unavailable.add(key);
+      if (!picker.hidden) renderPicker();
+      const c = loadedCatalog(view.device);
+      if (booted === autoChoice && c && !view.done) {
+        skipped.push(view.firmwareName || view.firmware);
+        return chooseFor(c);
+      }
+      text += ". Pick another firmware, or tap it again to try once more.";
+    }
+    report(state, text);
+  }
+
   async function ensureSynth() {
     if (synth) return synth;
     synthLoading ??= (async () => {
       const { Synth } = await import(ctx.assetUrl("synth.js"));
       const s = new Synth(canvas, {
         base: ctx.assetUrl(""),
-        onStatus: (state, text) => {
+        onStatus: (state, text, problem) => {
           showTap();
-          report(state, text);
+          status(state, text, problem);
         },
         onBoard: (b) => {
           aspect = s.W / s.H;
@@ -169,31 +201,37 @@ export function mount(root, ctx) {
     if (!force && booted === view.choice && bootedMhz === mhz) return;
     booted = view.choice;
     bootedMhz = mhz;
-    const c = await loadCatalog(view.device);
-    const entry = c.byId.get(view.firmware);
-    if (!entry) return report("error", `${view.firmwareName || view.firmware} is not in this game's list`);
-    const s = await ensureSynth();
+    let entry, s;
+    try {
+      entry = (await loadCatalog(view.device)).byId.get(view.firmware);
+      if (!entry) return report("error", `${view.firmwareName || view.firmware} is not in this game's list`);
+      s = await ensureSynth();
+    } catch (e) {
+      booted = -1; // (Restart tries again)
+      return report("error", `The synth could not start: ${e.message}`);
+    }
     if (!s) return;
     s.setBoard(view.device === "smk37" ? 1 : 0); // the device's panel at once (the package confirms it when it boots)
     await s.play(entry, mhz);
     showTap();
   }
 
-  /** Starred firmwares first, newest star first, then the catalog's order (E-013). */
-  function ordered(catalog) {
-    const stars = (view?.favorites?.[catalog.device] ?? []).filter((id) => catalog.byId.has(id));
-    const starred = new Set(stars);
-    return [...stars, ...catalog.firmwares.map((f) => f.id).filter((id) => !starred.has(id))];
-  }
-
   async function renderPicker() {
-    const device = pickerDevice ?? view?.device ?? "fm1";
+    const device = shown();
     for (const t of picker.querySelectorAll(".fs-tab")) t.setAttribute("aria-selected", String(t.dataset.device === device));
-    const catalog = await loadCatalog(device);
-    if (device !== (pickerDevice ?? view?.device ?? "fm1")) return; // another tab was tapped meanwhile
+    let catalog;
+    try {
+      catalog = await loadCatalog(device);
+    } catch (e) {
+      if (device !== shown()) return;
+      $(".fs-sheet-title").textContent = `Firmwares for the ${deviceName(device)}`;
+      $(".fs-list").innerHTML = pickerRows = `<div class="fs-empty muted">The ${esc(deviceName(device))}'s firmware list could not be loaded (${esc(e.message)}). Close the window and open it again to try once more.</div>`;
+      return;
+    }
+    if (device !== shown()) return; // another tab was tapped meanwhile
     const here = device === view?.device;
     // the order is taken when the window opens on a device, so a star does not move the card under the finger
-    if (pickerOrder?.device !== device) pickerOrder = { device, ids: ordered(catalog) };
+    if (pickerOrder?.device !== device) pickerOrder = { device, ids: orderedIds(catalog, view?.favorites?.[device]) };
     const stars = new Set(view?.favorites?.[device] ?? []);
     $(".fs-sheet-title").textContent = `Firmwares for the ${deviceName(device)} (${catalog.firmwares.length})`;
     const rows = pickerOrder.ids
@@ -201,24 +239,28 @@ export function mount(root, ctx) {
       .filter(Boolean)
       .map((f) => {
         const on = stars.has(f.id);
-        return `<div role="button" class="fs-card ${here && view?.firmware === f.id ? "on" : ""}" data-id="${esc(f.id)}">
+        const gone = unavailable.has(`${device}/${f.id}`);
+        return `<div role="button" class="fs-card ${here && view?.firmware === f.id ? "on" : ""} ${gone ? "gone" : ""}" data-id="${esc(f.id)}">
         <div class="fs-card-head"><b>${esc(f.name)}</b><span class="muted">${esc(f.version ?? "")}</span>
           <button type="button" class="fs-star ${on ? "starred" : ""}" aria-pressed="${on}" aria-label="${on ? "Remove the star" : "Star it"}">${on ? "★" : "☆"}</button></div>
         <div class="fs-card-by muted">${esc(f.author ?? "")}</div>
-        <div class="fs-card-about">${esc(f.about ?? "")}</div></div>`;
+        <div class="fs-card-about">${gone ? "Can't be downloaded right now. Tap to try again." : esc(f.about ?? "")}</div></div>`;
       })
       .join("");
     const list = $(".fs-list");
-    if (list.dataset.rows !== rows) {
-      list.dataset.rows = rows;
-      list.innerHTML = rows;
-    }
+    if (rows !== pickerRows) list.innerHTML = pickerRows = rows;
+  }
+
+  /** The window on a device's list: its order taken anew, from the top. */
+  function showDevice(device) {
+    pickerDevice = device;
+    pickerOrder = null;
+    $(".fs-list").scrollTop = 0;
   }
 
   async function openPicker() {
     if (!plays()) return;
-    pickerDevice = view.device;
-    pickerOrder = null;
+    showDevice(view.device);
     picker.hidden = false;
     await renderPicker();
     picker.querySelector(".fs-card.on")?.scrollIntoView({ block: "center" });
@@ -242,16 +284,15 @@ export function mount(root, ctx) {
     if (!tab) return;
     const device = tab.dataset.device;
     if (device !== pickerDevice) {
-      pickerDevice = device;
-      $(".fs-list").scrollTop = 0;
+      showDevice(device);
       renderPicker();
     }
     setDevice(device);
   });
   $(".fs-list").addEventListener("click", async (e) => {
     const card = e.target.closest(".fs-card");
-    const device = pickerDevice ?? view?.device;
-    const catalog = catalogs.get(device);
+    const device = shown();
+    const catalog = loadedCatalog(device);
     if (!card || !catalog) return;
     const star = e.target.closest(".fs-star");
     if (star) {
@@ -262,10 +303,21 @@ export function mount(root, ctx) {
     }
     picker.hidden = true;
     const f = catalog.byId.get(card.dataset.id);
-    if (!f || (f.id === view?.firmware && device === view?.device)) return;
+    if (!f) return;
+    if (f.id === view?.firmware && device === view?.device) {
+      if (view.status.state === "error") boot(true); // the chosen one again, after it failed: try once more
+      return;
+    }
     await ctx.act(playerSeat(), "firmware", { id: f.id, name: f.name, device });
   });
-  $(".fs-restart").addEventListener("click", () => boot(true));
+  /** Restart: the firmware again, or, when none could be chosen yet (no list), the device's first again. */
+  function restart() {
+    if (!view || view.done) return;
+    if (view.firmware) return boot(true);
+    defaultAsked = -1;
+    inst.update(view, [], info);
+  }
+  $(".fs-restart").addEventListener("click", restart);
   // a tap anywhere on the board wakes the sound where the browser waits for one
   const wake = () => {
     synth?.resume()?.then(showTap);
@@ -279,7 +331,7 @@ export function mount(root, ctx) {
     openPicker,
     setDevice,
     device: () => (plays() && view && !view.done ? view.device : null),
-    restart: () => boot(true),
+    restart,
     update(v, _events, i) {
       view = v;
       info = i;
@@ -316,20 +368,17 @@ export function mount(root, ctx) {
         if (!view.firmware) {
           if (defaultAsked === view.choice) return; // asked already; the answer is on its way
           defaultAsked = view.choice;
-          const f = c.byId.get(c.default) ?? c.firmwares[0];
-          if (f) ctx.act(playerSeat(), "firmware", { id: f.id, name: f.name, device: c.device });
+          skipped = [];
+          chooseFor(c);
           return;
         }
         if (picker.hidden === false) {
           // the window shows the device the board has, also when the phone switched it meanwhile
-          if (pickerDevice !== view.device) {
-            pickerDevice = view.device;
-            $(".fs-list").scrollTop = 0;
-          }
+          if (pickerDevice !== view.device) showDevice(view.device);
           renderPicker();
         }
         boot();
-      });
+      }, (e) => report("error", `The ${deviceName(v.device)}'s firmware list could not be loaded (${e.message}). Tap Restart to try again.`));
     },
     destroy() {
       dead = true;

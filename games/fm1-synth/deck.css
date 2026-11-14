@@ -31,3 +31,4 @@
 .fd-confirm-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .fd-confirm-btns button { min-height: 52px; }
 .fd-confirm[hidden], .fd-finish[hidden] { display: none; }
+.fd-note { padding: 12px 4px; font-size: 0.9em; }
