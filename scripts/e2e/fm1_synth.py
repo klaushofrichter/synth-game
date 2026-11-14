@@ -34,7 +34,9 @@ BASE = f"http://127.0.0.1:{PORT}"
 KEY = "e2ekey"
 T = TableCheck(BASE, KEY, OUT, "fm1-synth", CHECK)
 a, shot, check, phone, problems = T.a, T.shot, T.check, T.phone, T.problems
-blocked = []  # downloads refused on purpose (an unavailable package)
+# 404s from the firmwares' sites: a package that is gone (or refused here on purpose) is the game's to handle (E-015),
+# so the browser's console message about each is expected; a 404 from the table itself is not.
+outside_404 = []
 BOOT_SECS = 90  # a download from the author's site, then the boot
 
 # Where a part of the board sits, to see that facing north turns it in place rather than moving it.
@@ -83,6 +85,7 @@ def main():
             browser = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
             board = browser.new_context(viewport={"width": 1920, "height": 1080}, has_touch=True).new_page()
             watch(board, "board")
+            board.on("response", lambda r: r.status == 404 and not r.url.startswith(BASE) and outside_404.append(r.url))
             board.goto(BASE + "/board/")
             board.wait_for_selector("button.tile")
             deck = phone(browser, "Klaus", 320, 568)
@@ -147,7 +150,6 @@ def main():
             nxt = next(f for f in smk["firmwares"] if f["id"] != smk["default"])
             # (its install page too: upstream's fallback would look there for a package, and take another firmware's, #11)
             def gone(route):
-                blocked.append(route.request.url)
                 route.fulfill(status=404, body="gone")
             board.context.route("**/erik37-*.fwsc", gone)
             board.context.route("https://genkigenki.github.io/smk37/", gone)
@@ -206,8 +208,9 @@ def main():
             browser.close()
     finally:
         proc.terminate()
-    # The browser's words about the downloads refused on purpose are expected, one each, whenever they arrive.
-    for _ in blocked:
+    if outside_404:
+        print("404 from the firmwares' sites (handled by the game):\n  " + "\n  ".join(outside_404))
+    for _ in outside_404:
         i = next((i for i, e in enumerate(errors) if e.startswith("board:") and "status of 404" in e), None)
         if i is not None:
             del errors[i]
