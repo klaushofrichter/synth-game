@@ -49,27 +49,27 @@
   {
    "id": "erik37",
    "name": "Erik37",
-   "version": "1.2",
+   "version": "1.3",
    "author": "genkigenki",
    "license": "GPL-3.0",
    "about": "A grand piano for the SMK-37: a sampled concert grand with velocity layers, dampers and their noise, the three pedals, string resonance and four rooms.",
    "repo": "https://github.com/genkigenki/erik37",
-   "package": "https://genkigenki.github.io/smk37/firmware/erik37-1.2.fwsc",
+   "package": "https://genkigenki.github.io/smk37/firmware/erik37-1.3.fwsc",
    "installer": "https://genkigenki.github.io/smk37/"
   },
   {
    "id": "snoop37",
    "name": "Snoop37",
-   "version": "2.7.2",
+   "version": "2.8.5",
    "author": "isod89",
    "license": "GPL-3.0",
    "about": "SLOOP, the four-track looper groovebox, adapted for the SMK-37.",
-   "base": "SLOOP 2.7.1",
+   "base": "SLOOP 2.8.5",
    "porter": "genkigenki",
-   "repo": "https://github.com/genkigenki/sloop-fm1",
+   "repo": "https://github.com/genkigenki/sloop-fm1/tree/snoop37-2.8.5",
    "upstream": "https://github.com/isod89/sloop-fm1",
    "fm1": "sloop",
-   "package": "https://genkigenki.github.io/smk37/firmware/snoop37-2.7.2.fwsc",
+   "package": "https://genkigenki.github.io/smk37/firmware/snoop37-2.8.5.fwsc",
    "installer": "https://genkigenki.github.io/smk37/"
   },
   {
