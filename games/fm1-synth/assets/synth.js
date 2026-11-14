@@ -11,10 +11,14 @@ const PITCH_REST = 535, MOD_REST = 629;
 /**
  * new Synth(canvas, { base, onStatus, onBoard })
  *   base      the URL of this folder (for emu/…)
- *   onStatus  (state, text): "idle" | "loading" | "running" | "error", and words for people
+ *   onStatus  (state, text): "idle" | "loading" | "running" | "error", and words for people; on an error, { unavailable }
+ *             when the package could not be downloaded
  *   onBoard   (board): the panel changed (0 FM-1, 1 SMK-37); the canvas has its new size
  * Then: await synth.init(); synth.play(entry, mhz) boots a catalog entry; synth.resume() from a tap.
  */
+/** Two arrays (or two missing ones) hold the same values. */
+const same = (a, b) => a === b || (!!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]));
+
 export class Synth {
   constructor(canvas, { base, onStatus = () => {}, onBoard = () => {} }) {
     this.canvas = canvas;
@@ -42,6 +46,8 @@ export class Synth {
     this.volume = 0.8;
     this.muted = false;
     this.dead = false;
+    this.dirty = true; // something to draw: a new frame from the machine, a touch, another panel
+    this.image = null; // the panel's pixels in wasm memory, as ImageData (rebuilt when the memory grows)
   }
 
   async init() {
@@ -101,6 +107,7 @@ export class Synth {
     this.H = this.ui.panel_height();
     this.canvas.width = this.W;
     this.canvas.height = this.H;
+    this.dirty = true;
     this.down.fill(0);
     this.encClicks.fill(0);
     this.onBoard(b);
@@ -112,7 +119,7 @@ export class Synth {
     this.onStatus("loading", `Loading ${entry.name}…`);
     try {
       await this.audio();
-      const got = this.packages.get(entry.id) ?? (await this.kept(entry)) ?? (await fetchPackage(entry));
+      const got = this.packages.get(entry.id) ?? (await this.kept(entry)) ?? (await this.download(entry));
       this.packages.set(entry.id, got);
       if (seq !== this.seq || this.dead) return;
       const hash = await packageHash(got.bytes);
@@ -130,6 +137,7 @@ export class Synth {
       this.pointers.clear();
       this.encClicks.fill(0);
       this.frame = null;
+      this.dirty = true;
       const booted = new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("the firmware did not boot in time")), 30000);
         this.waiters.set(seq, { resolve, reject, timer });
@@ -142,9 +150,20 @@ export class Synth {
     } catch (error) {
       if (seq !== this.seq || this.dead) return;
       this.node?.port.postMessage({ type: "resume" });
-      this.onStatus("error", `${entry.name}: ${error.message}`);
+      this.onStatus("error", error.unavailable ? error.message : `${entry.name}: ${error.message}`, { unavailable: !!error.unavailable });
     } finally {
       this.waiters.delete(seq);
+    }
+  }
+
+  /** A firmware's package from its author's site; a failure says so in words, marked `unavailable`. */
+  async download(entry) {
+    try {
+      return await fetchPackage(entry);
+    } catch (cause) {
+      const e = new Error(`${entry.name} can't be downloaded from its author's site right now`, { cause });
+      e.unavailable = true;
+      throw e;
     }
   }
 
@@ -190,7 +209,10 @@ export class Synth {
       return;
     }
     if (m.type === "frame" && m.seq === this.seq) {
-      if (!m.lcd && this.frame?.lcd) m.lcd = this.frame.lcd;
+      const was = this.frame;
+      if (!m.lcd && was?.lcd) m.lcd = was.lcd;
+      // drawn again only when the screen, an LED or a pad changed (the machine sends frames all the time)
+      if (m.lcd || !was || !same(m.leds, was.leds) || !same(m.pads, was.pads)) this.dirty = true;
       this.frame = m;
       if (m.halted && !this.halted) this.onStatus("error", "The emulated CPU halted");
       this.halted = m.halted;
@@ -227,7 +249,10 @@ export class Synth {
     this.node?.port.postMessage(m);
   }
 
+  /** One animation frame: the panel is drawn again only when something changed (or a knob's turn still shows). */
   draw() {
+    if (!this.dirty && !this.turning.some(Boolean)) return;
+    this.dirty = false;
     const ui = this.ui;
     const mem = () => ui.memory.buffer;
     const f = this.frame;
@@ -244,26 +269,33 @@ export class Synth {
     ui.panel_set(2, 0, this.pot);
     for (let i = 0; i < 9; i++) {
       ui.panel_set(3, i, this.turning[i]);
-      if (this.turning[i]) this.turning[i]--;
+      if (this.turning[i] && --this.turning[i] === 0) this.dirty = true; // once more, without the turn
     }
     if (this.board === 1) for (let i = 0; i < 23; i++) ui.panel_set(4, i, this.analog[i]);
     const p = ui.panel_draw();
-    this.g.putImageData(new ImageData(new Uint8ClampedArray(mem(), p, this.W * this.H * 4), this.W, this.H), 0, 0);
+    const img = this.image;
+    if (!img || img.data.buffer !== mem() || img.data.byteOffset !== p || img.width !== this.W || img.height !== this.H) {
+      this.image = new ImageData(new Uint8ClampedArray(mem(), p, this.W * this.H * 4), this.W, this.H);
+    }
+    this.g.putImageData(this.image, 0, 0);
   }
 
   // ------------------------------------------------------------- touch
   setKey(id, on) {
     if (this.down[id] === (on ? 1 : 0)) return;
     this.down[id] = on ? 1 : 0;
+    this.dirty = true;
     this.send({ type: "key", id, down: on });
   }
   turn(i, clicks) {
     this.encClicks[i] += clicks;
+    this.dirty = true;
     this.turning[i] = 10;
     this.send({ type: "enc", enc: this.ui.panel_enc_id(i), clicks });
   }
   setPot(v) {
     this.pot = Math.max(0, Math.min(1023, Math.round(v)));
+    this.dirty = true;
     this.turning[7] = 10;
     this.send({ type: "pot", value: this.pot });
   }
@@ -271,6 +303,7 @@ export class Synth {
     v = Math.max(0, Math.min(1023, Math.round(v)));
     if (this.analog[i] === v) return;
     this.analog[i] = v;
+    this.dirty = true;
     this.send({ type: "analog", idx: i, value: v });
   }
   /** SMK-37: the next keys' velocity, 0 (softest) .. 1 (hardest), as the time between a key's two contacts. */

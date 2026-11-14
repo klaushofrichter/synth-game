@@ -2,22 +2,24 @@
 // The synth itself is played on the board (E-003). The player's starred firmwares live in this phone's browser
 // between games: sent to the game once, kept up to date from it (E-013).
 import { esc, useStyles } from "/shared/board-kit.js";
+import { DEVICES, deviceName, loadCatalog, noFavorites, orderedIds } from "/games/fm1-synth/assets/catalog.js";
 
 const STORE = "fm1-synth.favorites";
-const DEVICES = ["fm1", "smk37"];
+
+/** Each device's list of ids, from whatever was stored. */
+const clean = (v) => Object.fromEntries(DEVICES.map(({ id: d }) => [d, Array.isArray(v?.[d]) ? v[d].filter((x) => typeof x === "string") : []]));
 
 function stored() {
   try {
-    const v = JSON.parse(localStorage.getItem(STORE) ?? "null");
-    return Object.fromEntries(DEVICES.map((d) => [d, Array.isArray(v?.[d]) ? v[d].filter((x) => typeof x === "string") : []]));
+    return clean(JSON.parse(localStorage.getItem(STORE) ?? "null"));
   } catch {
-    return { fm1: [], smk37: [] };
+    return noFavorites();
   }
 }
 
 function store(favorites) {
   try {
-    localStorage.setItem(STORE, JSON.stringify({ fm1: favorites.fm1 ?? [], smk37: favorites.smk37 ?? [] }));
+    localStorage.setItem(STORE, JSON.stringify(clean(favorites)));
   } catch {
     // (private browsing, or storage blocked: the stars last for this game only)
   }
@@ -28,7 +30,7 @@ export function mount(root, ctx) {
   root.innerHTML = `<div class="fd">
     <div class="card fd-now"><div class="eyebrow fd-dev"></div><div class="fd-name"></div>
       <div class="fd-status"><span class="fd-dot"></span><span class="fd-text"></span></div></div>
-    <div class="fd-devices"><button type="button" class="fd-dev-btn" data-device="fm1">FM-1</button><button type="button" class="fd-dev-btn" data-device="smk37">SMK-37</button></div>
+    <div class="fd-devices">${DEVICES.map((d) => `<button type="button" class="fd-dev-btn" data-device="${d.id}">${d.name}</button>`).join("")}</div>
     <div class="fd-hint muted">Play the synth on the board. Pick another firmware here or on the board. Starred ones come first.</div>
     <div class="fd-list"></div>
     <button type="button" class="fd-finish">Finish</button>
@@ -38,33 +40,45 @@ export function mount(root, ctx) {
   const $ = (s) => root.querySelector(s);
   let view = null, catalog = null, device = null;
   let sent = false; // this phone's stars went to the game
-  let order = null; // { device, synced, catalog, ids }: the list's order, taken when the device or the stars arrive
+  let order = null; // { synced, catalog, ids }: the list's order, taken when the device's list or the stars arrive
+  let rows = ""; // the list as drawn
+
+  let failed = false; // the device's list could not be loaded (asked again in a few seconds)
+  let retry = null;
 
   async function load(dev) {
-    if (device === dev) return;
+    if (device === dev && !failed) return;
     device = dev;
+    failed = false;
     try {
-      catalog = await (await fetch(ctx.assetUrl(`emu/firmwares-${dev}.json`))).json();
+      const c = await loadCatalog(ctx.assetUrl, dev);
+      if (device === dev) catalog = c; // (not when another device was chosen meanwhile)
     } catch {
-      catalog = { firmwares: [] };
+      if (device === dev) {
+        failed = true;
+        clearTimeout(retry);
+        retry = setTimeout(() => view && load(view.device), 5000);
+      }
     }
     draw();
   }
 
+  /** The list's place says something instead of rows: while it loads, or when it could not be loaded. */
+  function note(text) {
+    const html = `<div class="fd-note muted">${esc(text)}</div>`;
+    if (html !== rows) $(".fd-list").innerHTML = rows = html;
+  }
+
   function draw() {
-    if (!view || !catalog) return;
-    const list = $(".fd-list");
-    const stars = view.favorites?.[device] ?? [];
-    if (order?.device !== device || order.synced !== view.favSynced || order.catalog !== catalog) {
-      // starred first, newest star first; a star given here moves the row only the next time
-      const known = new Set(catalog.firmwares.map((f) => f.id));
-      const first = stars.filter((id) => known.has(id));
-      order = { device, synced: view.favSynced, catalog,
-        ids: [...first, ...catalog.firmwares.map((f) => f.id).filter((id) => !first.includes(id))] };
-    }
-    const byId = new Map(catalog.firmwares.map((f) => [f.id, f]));
-    const rows = order.ids
-      .map((id) => byId.get(id))
+    if (!view) return;
+    // only the list of the device the board has: a tap on it chooses for that device
+    if (failed) return note(`The ${deviceName(view.device)}'s firmware list could not be loaded. Trying again…`);
+    if (catalog?.device !== view.device) return note("Loading the firmware list…");
+    const stars = view.favorites?.[catalog.device] ?? [];
+    // starred first, newest star first; a star given here moves the row only the next time
+    if (order?.synced !== view.favSynced || order.catalog !== catalog) order = { synced: view.favSynced, catalog, ids: orderedIds(catalog, stars) };
+    const html = order.ids
+      .map((id) => catalog.byId.get(id))
       .filter(Boolean)
       .map((f) => {
         const on = stars.includes(f.id);
@@ -74,22 +88,19 @@ export function mount(root, ctx) {
         ${view.done ? "disabled" : ""}>${on ? "★" : "☆"}</button></div>`;
       })
       .join("");
-    if (list.dataset.rows !== rows) {
-      list.dataset.rows = rows;
-      list.innerHTML = rows;
-    }
+    if (html !== rows) $(".fd-list").innerHTML = rows = html;
   }
 
   $(".fd-list").addEventListener("click", (e) => {
     const star = e.target.closest(".fd-star");
     if (star) {
-      if (view && !view.done) ctx.send("star", { device, id: star.dataset.id, on: star.getAttribute("aria-pressed") !== "true" });
+      if (view && !view.done) ctx.send("star", { device: catalog.device, id: star.dataset.id, on: star.getAttribute("aria-pressed") !== "true" });
       return;
     }
     const b = e.target.closest(".fd-fw");
     if (!b || !view || view.done || b.dataset.id === view.firmware) return;
     // (the device of the list it came from: the board may have switched while this list was shown)
-    ctx.send("firmware", { id: b.dataset.id, name: b.dataset.name, device });
+    ctx.send("firmware", { id: b.dataset.id, name: b.dataset.name, device: catalog.device });
   });
   root.querySelectorAll(".fd-dev-btn").forEach((b) =>
     b.addEventListener("click", () => {
@@ -121,7 +132,7 @@ export function mount(root, ctx) {
         sent = false; // (sent again if the seat changes hands)
         store(v.favorites);
       }
-      $(".fd-dev").textContent = v.device === "smk37" ? "M-VAVE SMK-37" : "M-VAVE FM-1";
+      $(".fd-dev").textContent = `M-VAVE ${deviceName(v.device)}`;
       $(".fd-name").textContent = v.firmwareName || "Choosing a firmware…";
       $(".fd-text").textContent = v.done ? "Done" : v.status.text || "";
       $(".fd-dot").dataset.state = v.status.state;
@@ -134,6 +145,8 @@ export function mount(root, ctx) {
       load(v.device);
       draw();
     },
-    destroy() {},
+    destroy() {
+      clearTimeout(retry);
+    },
   };
 }
