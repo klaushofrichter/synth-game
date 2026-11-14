@@ -76,7 +76,7 @@ wasm, its audio worklet and the firmware lists) is committed in `games/fm1-synth
 | `tools/build_game.sh`, `scripts/emu-source.mjs` | Build the emulator into the game's assets; what the build is made from, for the test that keeps it current |
 | `games-service.ref` | The games-service branch, tag or commit the game is tested against |
 | `scripts/games-service.sh` | Brings games-service into `.games-service/` (git-ignored) for the tests; `npm run setup` runs it |
-| `tests/` | Vitest: the rules on games-service's own runtime (`fm1-synth.test.ts`), the bundle path the console and tables take and the rules for players (`bundle.test.ts`), the committed emulator build (`assets.test.ts`) |
+| `tests/` | Vitest: the rules on games-service's own runtime (`fm1-synth.test.ts`), the bundle path the console and tables take and the rules for players (`bundle.test.ts`), the committed emulator build (`assets.test.ts`), the board and the phone in a happy-dom page with a stand-in emulator (`ui.test.ts`, `fake-synth.js`) |
 | `scripts/e2e/` | The browser check (Playwright): a real Table Host, the board and a phone, from the lobby to the result, with both devices and the board turned north; uses games-service's e2e helpers |
 | `docs/decisions.md` | Decisions for the game (E-nnn) |
 | everything else | The emulator, from upstream: `crates/` (Rust: the CPU, chip, desktop app, wasm), `web/` (its browser page), `tools/`, `docs/`, … See [FM1-EMU.md](FM1-EMU.md). |
