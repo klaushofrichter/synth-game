@@ -19,7 +19,7 @@
       "label": "Device to start with",
       "labels": { "fm1": "FM-1", "smk37": "SMK-37" },
       "hints": {
-        "fm1": "The FM-1: a pocket FM synthesizer with a screen, knobs and 25 keys. Over 150 firmwares.",
+        "fm1": "The FM-1: a pocket FM synthesizer with a screen, knobs and 25 keys. Over 200 firmwares.",
         "smk37": "The SMK-37: a 37-key keyboard with pads and faders, with the FM-1's chip inside. Its community ports."
       }
     }
