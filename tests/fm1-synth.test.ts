@@ -1,5 +1,6 @@
 // FM-1 Synth's rules on games-service's own runtime: choosing firmwares, the board's status reports, finishing, the
 // summary, exact replay, a player exchanged mid-game and the player's starred firmwares (E-013).
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { loadGame, replaysExactly, seats, start } from "./harness.ts";
 
@@ -113,5 +114,16 @@ describe("FM-1 Synth", () => {
     expect(rt.boardView()).toMatchObject({ favorites: { fm1: ["amb"], smk37: [] }, favSynced: true });
     rt.submit(0, { name: "finish", payload: {} }, "human");
     expect(replaysExactly(game, rt)).toBe(true);
+  });
+});
+
+describe("the devices", () => {
+  it("are the same in the UIs' shared list (assets/catalog.js) as in the manifest's setting", async () => {
+    // @ts-expect-error: a plain module of the game's UIs
+    const { DEVICES } = await import("../games/fm1-synth/assets/catalog.js");
+    const m = JSON.parse(readFileSync(new URL("../games/fm1-synth/manifest.json", import.meta.url), "utf8"));
+    const setting = m.settings.find((s: { key: string }) => s.key === "device");
+    expect(DEVICES.map((d: { id: string }) => d.id)).toEqual(setting.values);
+    expect(DEVICES.map((d: { name: string }) => d.name)).toEqual(setting.values.map((v: string) => setting.labels[v]));
   });
 });

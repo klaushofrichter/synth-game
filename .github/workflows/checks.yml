@@ -61,10 +61,15 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
+          cache: pip
+          cache-dependency-path: scripts/e2e/requirements.txt
       - run: npm ci
       - run: scripts/games-service.sh
       - run: pip install -r scripts/e2e/requirements.txt
       - run: python -m playwright install --with-deps chromium
+      # Every listed firmware can still be downloaded from its author's site (E-015): a warning on a pull request, a
+      # failure on the weekly run, since authors replace packages without notice.
+      - run: node scripts/check-packages.mjs ${{ github.event_name == 'schedule' && '--strict' || '' }}
       # The firmwares come from their authors' sites, as on a table: this check needs the internet.
       - run: scripts/e2e/run-all.sh e2e-out
       - if: always()

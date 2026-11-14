@@ -97,3 +97,16 @@ Records are history: an older record is not edited when a newer one changes it. 
 - **E-014 · 2026-11-12 · Klaus** — **Finish** on the phone asks first ("End the session?", with **Keep playing** and
   **Finish**). *Why:* it sits at the end of the firmware list and ends the game for good: the platform has no way back
   into a finished game, only the board's **Play again** (and the phone's Ready) for a new one.
+- **E-015 · 2026-11-13 · Klaus** — Firmwares that cannot be had are handled, not just reported. Authors replace or
+  remove packages without notice (Erik37 1.2 and Snoop37 2.7.2 went on 2026-11-13, Ketch left the Firmware Hub), so:
+  - a package that cannot be downloaded says so in words ("… can't be downloaded from its author's site right now");
+  - when it is the device's first firmware, which the board chose itself, the board plays the next one it can
+    download and names the one it passed over; when none can be downloaded, it says to check the table's internet;
+  - the firmware window marks such a firmware (dimmed, "Tap to try again"), and a tap on the chosen one after it
+    failed tries again;
+  - a firmware list or the emulator that cannot be loaded says so on the board (Restart tries again), the phone says
+    so in its list and asks again by itself, and stars of firmwares no longer listed are passed over;
+  - `scripts/check-packages.mjs` tries every listed package (and the Hub's newer one where upstream falls back to
+    it): a warning on a pull request, a failure on the weekly run.
+  *Why:* a table found out first: its SMK-37 started on a firmware whose package had gone, and stayed silent.
+

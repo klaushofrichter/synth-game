@@ -71,3 +71,6 @@
 .fs-north .fs-bar, .fs-north .fs-frame, .fs-north .fs-sheet, .fs-north .fs-away-box { transform: rotate(180deg); }
 /* The seat plate turns in place as well (E-008). The board kit sets its turn inline, hence !important. */
 .kit-plates.fs-plates-north .kit-plate { transform: translate(-50%, -50%) rotate(180deg) !important; }
+/* a firmware whose package could not be downloaded on this board: still there, to try again */
+.fs-card.gone { opacity: 0.55; border-style: dashed; }
+.fs-empty { grid-column: 1 / -1; padding: 30px 4px; font-size: 22px; }
