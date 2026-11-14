@@ -34,6 +34,7 @@ BASE = f"http://127.0.0.1:{PORT}"
 KEY = "e2ekey"
 T = TableCheck(BASE, KEY, OUT, "fm1-synth", CHECK)
 a, shot, check, phone, problems = T.a, T.shot, T.check, T.phone, T.problems
+blocked = []  # downloads refused on purpose (an unavailable package)
 BOOT_SECS = 90  # a download from the author's site, then the boot
 
 # Where a part of the board sits, to see that facing north turns it in place rather than moving it.
@@ -145,10 +146,11 @@ def main():
                 smk = json.load(fh)
             nxt = next(f for f in smk["firmwares"] if f["id"] != smk["default"])
             # (its install page too: upstream's fallback would look there for a package, and take another firmware's, #11)
-            gone = lambda route: route.fulfill(status=404, body="gone")
+            def gone(route):
+                blocked.append(route.request.url)
+                route.fulfill(status=404, body="gone")
             board.context.route("**/erik37-*.fwsc", gone)
             board.context.route("https://genkigenki.github.io/smk37/", gone)
-            seen = len(errors)
             board.tap(".fs-tab[data-device=smk37]")
             wait(lambda: "SMK-37" in board.inner_text(".fs-sheet-title"), 10, "the SMK-37 list")
             wait_running(board, deck, nxt["name"])
@@ -158,8 +160,6 @@ def main():
             # back on its site: a tap on it tries again
             board.context.unroute("**/erik37-*.fwsc")
             board.context.unroute("https://genkigenki.github.io/smk37/")
-            # the browser's own words about those refused downloads are expected; anything else is not
-            errors[seen:] = [e for e in errors[seen:] if "status of 404" not in e]
             board.tap(".fs-card[data-id=erik37]")
             wait_running(board, deck, "Erik37")
             board.click(".fs-pick")
@@ -206,6 +206,11 @@ def main():
             browser.close()
     finally:
         proc.terminate()
+    # The browser's words about the downloads refused on purpose are expected, one each, whenever they arrive.
+    for _ in blocked:
+        i = next((i for i, e in enumerate(errors) if e.startswith("board:") and "status of 404" in e), None)
+        if i is not None:
+            del errors[i]
     if errors or problems:
         print("BROWSER ERRORS:\n" + "\n".join(errors) if errors else "", "\nLAYOUT PROBLEMS:\n" + "\n".join(problems) if problems else "")
         sys.exit(1)
