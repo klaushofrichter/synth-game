@@ -3,6 +3,7 @@
 // the web files copied as they are, and the catalogs the game reads, made from the web page's.
 //   node scripts/emu-source.mjs fingerprint     the fingerprint of the source as it is now
 //   node scripts/emu-source.mjs catalogs        write the game's catalogs (the build script runs it)
+//   node scripts/emu-source.mjs build           build.json's contents: the fingerprint and the emulator's version
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -27,6 +28,13 @@ export function fingerprint() {
   return h.digest("hex");
 }
 
+/** The emulator's version: upstream's workspace version in Cargo.toml (the settings window shows it). */
+export function version() {
+  const v = /\[workspace\.package\][^[]*?^version\s*=\s*"([^"]+)"/m.exec(readFileSync(ROOT + "Cargo.toml", "utf8"));
+  if (!v) throw new Error("Cargo.toml: no [workspace.package] version");
+  return v[1];
+}
+
 // The first firmware per device: on the SMK-37 Erik37, a grand piano written for it (silent until played, a better
 // start at a table than a groovebox that plays by itself; E-005); on the FM-1 the page's own default.
 const DEFAULTS = { smk37: "erik37" };
@@ -46,6 +54,7 @@ export function catalog(device) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const cmd = process.argv[2];
   if (cmd === "fingerprint") console.log(fingerprint());
+  else if (cmd === "build") console.log(JSON.stringify({ source: fingerprint(), version: version() }));
   else if (cmd === "catalogs") {
     for (const d of Object.keys(SOURCE_CATALOG)) {
       const text = catalog(d);
@@ -53,7 +62,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       console.log(`firmwares-${d}.json: ${JSON.parse(text).firmwares.length} firmwares`);
     }
   } else {
-    console.error("usage: node scripts/emu-source.mjs fingerprint | catalogs");
+    console.error("usage: node scripts/emu-source.mjs fingerprint | catalogs | build");
     process.exit(2);
   }
 }

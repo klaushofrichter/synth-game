@@ -7,7 +7,11 @@
   justify-content: space-between; gap: 24px; }
 .fs-now { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .fs-name { font-family: var(--display); font-size: 30px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 1150px; }
-.fs-status { font-size: 19px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 1150px; }
+.fs-line { display: flex; gap: 18px; align-items: baseline; font-size: 19px; color: var(--ink-soft); white-space: nowrap; max-width: 1150px; }
+.fs-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* how the emulator keeps up on this computer (E-018): red when it falls to real time or below */
+.fs-perf { flex: none; font-family: ui-monospace, Menlo, monospace; font-size: 17px; }
+.fs-perf.fs-slow { color: #ff6b6b; font-weight: 700; }
 .fs-dot { flex: none; width: 16px; height: 16px; border-radius: 50%; background: #6b7a76; box-shadow: 0 0 0 3px rgba(0,0,0,.35); }
 .fs-dot[data-state="loading"] { background: #f2d24b; }
 .fs-dot[data-state="running"] { background: #7fd18b; box-shadow: 0 0 12px #7fd18b; }
