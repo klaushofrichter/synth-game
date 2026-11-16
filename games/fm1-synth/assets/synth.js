@@ -9,23 +9,28 @@ const NKEY = 37; // SMK-37: keys 0..36, buttons from 37
 const PITCH_REST = 535, MOD_REST = 629;
 
 /**
- * new Synth(canvas, { base, onStatus, onBoard })
+ * new Synth(canvas, { base, onStatus, onBoard, onPerf })
  *   base      the URL of this folder (for emu/…)
  *   onStatus  (state, text): "idle" | "loading" | "running" | "error", and words for people; on an error, { unavailable }
  *             when the package could not be downloaded
  *   onBoard   (board): the panel changed (0 FM-1, 1 SMK-37); the canvas has its new size
+ *   onPerf    ({ speed, load }), once a second while a firmware runs, as the web page's status line has them: speed is
+ *             emulated time per time spent emulating (below 1x the sound breaks up), load the share of the audio
+ *             thread's time the emulation takes
  * Then: await synth.init(); synth.play(entry, mhz) boots a catalog entry; synth.resume() from a tap.
  */
 /** Two arrays (or two missing ones) hold the same values. */
 const same = (a, b) => a === b || (!!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]));
 
 export class Synth {
-  constructor(canvas, { base, onStatus = () => {}, onBoard = () => {} }) {
+  constructor(canvas, { base, onStatus = () => {}, onBoard = () => {}, onPerf = () => {} }) {
     this.canvas = canvas;
     this.g = canvas.getContext("2d");
     this.base = base;
     this.onStatus = onStatus;
     this.onBoard = onBoard;
+    this.onPerf = onPerf;
+    this.perf = null; // this second's timing from the worklet's frames: { t, busy, span, emulated }
     this.flipped = false; // the board's game faces north: the panel is turned 180°
     this.saves = new SaveStore();
     this.packages = new Map();
@@ -137,6 +142,7 @@ export class Synth {
       this.pointers.clear();
       this.encClicks.fill(0);
       this.frame = null;
+      this.perf = null;
       this.dirty = true;
       const booted = new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("the firmware did not boot in time")), 30000);
@@ -216,7 +222,21 @@ export class Synth {
       this.frame = m;
       if (m.halted && !this.halted) this.onStatus("error", "The emulated CPU halted");
       this.halted = m.halted;
+      this.time(m);
     }
+  }
+
+  /** Add a frame's timing to this second's (as web/main.js's perf does); report the second once it is over. */
+  time(m) {
+    const now = performance.now();
+    const p = (this.perf ??= { t: now, busy: 0, span: 0, emulated: 0 });
+    p.busy += m.busy ?? 0;
+    p.span += ((m.quanta ?? 0) * (m.frames ?? 0)) / 44.1; // ms of audio those quanta stand for
+    p.emulated += m.emulated ?? 0;
+    if (now - p.t < 1000) return;
+    this.perf = { t: now, busy: 0, span: 0, emulated: 0 };
+    if (m.halted || !(p.busy > 0 && p.emulated > 0 && p.span > 0)) return;
+    this.onPerf({ speed: p.emulated / p.busy, load: p.busy / p.span });
   }
 
   /** Keep the firmware's flash as it changed from its package's own (only the sectors it wrote). */

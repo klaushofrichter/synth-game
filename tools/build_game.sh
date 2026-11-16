@@ -14,6 +14,6 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$OUT"
 cp "$TMP/dist/fm1_web.wasm" "$ROOT/web/worklet.js" "$ROOT/web/fwsc.js" "$ROOT/web/persistence.js" "$OUT/"
 node "$ROOT/scripts/emu-source.mjs" catalogs
-# What the wasm was built from, for the test that keeps it current.
-printf '{ "source": "%s" }\n' "$(node "$ROOT/scripts/emu-source.mjs" fingerprint)" > "$OUT/build.json"
+# What the wasm was built from, for the test that keeps it current, and its version (shown in the game's settings).
+node "$ROOT/scripts/emu-source.mjs" build > "$OUT/build.json"
 ls -la "$OUT" | grep -v "^total"

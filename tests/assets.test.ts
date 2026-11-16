@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error: a plain module, shared with the build script
-import { COPIED, EMU, ROOT, catalog, fingerprint } from "../scripts/emu-source.mjs";
+import { COPIED, EMU, ROOT, catalog, fingerprint, version } from "../scripts/emu-source.mjs";
 
 const FIX = "run tools/build_game.sh and commit games/fm1-synth/assets/emu with a new game version";
 
@@ -12,6 +12,10 @@ describe("the game's emulator build", () => {
   it("was built from the emulator source as it is now", () => {
     const built = JSON.parse(readFileSync(EMU + "build.json", "utf8")).source;
     expect(built, `the wasm is older than crates/, Cargo.* or web/build.sh: ${FIX}`).toBe(fingerprint());
+  });
+
+  it("names the emulator's version, for the settings window", () => {
+    expect(JSON.parse(readFileSync(EMU + "build.json", "utf8")).version, FIX).toBe(version());
   });
 
   it("carries the web page's worklet, package reader and save store as they are", () => {

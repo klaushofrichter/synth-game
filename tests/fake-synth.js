@@ -1,5 +1,5 @@
 // A stand-in for assets/synth.js in the board's tests: no wasm and no sound, it records what the board asks of it and
-// lets a test say how the firmware runs (`fake.status(...)`, as the emulator's onStatus would).
+// lets a test say how the firmware runs (`fake.status(...)`, `fake.perf(...)`, as the emulator's onStatus and onPerf would).
 export class Synth {
   constructor(canvas, opts) {
     this.opts = opts;
@@ -35,5 +35,9 @@ export class Synth {
   /** How the firmware runs, as the emulator reports it. */
   status(state, text, problem) {
     this.opts.onStatus(state, text, problem);
+  }
+  /** How fast it runs, as the emulator reports it once a second. */
+  perf(speed, load) {
+    this.opts.onPerf({ speed, load });
   }
 }

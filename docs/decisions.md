@@ -132,3 +132,11 @@ Records are history: an older record is not edited when a newer one changes it. 
   on GitHub's release downloads, which refuse other sites' pages: no browser can download it, upstream's page
   neither); with no answer from any site (no internet) nothing is left out. *Why:* Klaus: "We need to keep the
   versions of the firmware current." The merge of 2026-11-14 took the FM-1 list from 157 to 201 firmwares.
+- **E-018 · 2026-11-16 · Klaus** — The board shows how the emulator keeps up, and the settings name its version.
+  Beside the firmware's status, while it runs, the bar shows the speed and the load as upstream's page has them
+  ("22x real time · load 5%": emulated time per time spent emulating, and the share of the audio thread's time the
+  emulation takes), measured once a second from the worklet's frames (`assets/synth.js`). It turns red at 1x or
+  below, where the sound breaks up. It is this computer's figure, so it stays on the board: not in the game's state,
+  not on the phone. The settings window names the emulator, "fm1-emu 0.5.1": upstream's workspace version from
+  `Cargo.toml`, written into `assets/emu/build.json` by `tools/build_game.sh` (a test keeps it current). *Why:* Klaus
+  asked for upstream's performance indicator, to see whether a table's computer is fast enough.

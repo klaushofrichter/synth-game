@@ -14,6 +14,8 @@ const prefsOf = (info) => ({
 
 /** The mounted board, for the settings window's buttons. */
 let live = null;
+/** The emulator's version (upstream fm1-emu's, from emu/build.json), once the board has read it. */
+let emuVersion = null;
 
 export function settings({ info, setPrefs }) {
   const p = prefsOf(info);
@@ -47,15 +49,21 @@ export function settings({ info, setPrefs }) {
     },
     { type: "button", label: "Firmware", action: "Choose a firmware…", onChange: () => live?.openPicker() },
     { type: "button", label: "Restart", action: "Restart the firmware", onChange: () => live?.restart() },
+    ...(emuVersion ? [{ type: "text", label: "Emulator", value: `fm1-emu ${emuVersion}` }] : []),
   ];
 }
 
 export function mount(root, ctx) {
   useStyles(`/games/${ID}/board.css`);
+  if (!emuVersion)
+    fetch(ctx.assetUrl("emu/build.json"))
+      .then((r) => r.json())
+      .then((b) => (emuVersion = b.version ?? null))
+      .catch(() => {});
   const box = html(`<div class="fs-root">
     <div class="fs-game">
       <div class="fs-bar">
-        <div class="fs-now"><span class="fs-dot"></span><div><div class="fs-name"></div><div class="fs-status"></div></div></div>
+        <div class="fs-now"><span class="fs-dot"></span><div><div class="fs-name"></div><div class="fs-line"><span class="fs-status"></span><span class="fs-perf" hidden></span></div></div></div>
         <div class="fs-actions">
           <button class="fs-btn fs-restart" type="button">Restart</button>
           <button class="fs-btn fs-pick primary" type="button">Firmware…</button>
@@ -81,6 +89,7 @@ export function mount(root, ctx) {
   const stage = $(".fs-stage");
   const picker = $(".fs-picker");
   const tap = $(".fs-tap");
+  const perf = $(".fs-perf");
 
   let info = null, view = null;
   let pickerDevice = null; // the device whose firmwares the picker shows
@@ -169,6 +178,7 @@ export function mount(root, ctx) {
           showTap();
           status(state, text, problem);
         },
+        onPerf: showPerf,
         onBoard: (b) => {
           aspect = s.W / s.H;
           box.dataset.board = b ? "smk37" : "fm1";
@@ -185,6 +195,14 @@ export function mount(root, ctx) {
       return s;
     })();
     return synthLoading;
+  }
+
+  /** How the emulator keeps up on this board (only here: it is this computer's, not the game's): red at 1x or below. */
+  function showPerf({ speed, load }) {
+    if (view?.status.state !== "running" || view.done) return;
+    perf.textContent = `${speed.toFixed(speed < 10 ? 1 : 0)}x real time · load ${Math.round(100 * load)}%`;
+    perf.classList.toggle("fs-slow", speed <= 1);
+    perf.hidden = false;
   }
 
   function showTap() {
@@ -353,6 +371,7 @@ export function mount(root, ctx) {
       $(".fs-name").textContent = v.firmwareName ? `${dev} · ${v.firmwareName}` : `M-VAVE ${dev}`;
       $(".fs-status").textContent = v.done ? "Done" : v.status.text || (v.firmware ? "" : "Choosing a firmware…");
       $(".fs-dot").dataset.state = v.done ? "idle" : v.status.state;
+      if (v.done || v.status.state !== "running") perf.hidden = true;
       $(".fs-actions").hidden = !local || v.done;
       const away = $(".fs-away");
       frame.hidden = !local;
