@@ -22,6 +22,7 @@ const fw = (id: string, name: string) => ({ id, name, version: "1.0", author: `$
 const CATALOGS: Record<string, object> = {
   "/emu/firmwares-fm1.json": { default: "alpha", firmwares: [fw("alpha", "Alpha"), fw("beta", "Beta"), fw("gamma", "Gamma")] },
   "/emu/firmwares-smk37.json": { default: "sigma", firmwares: [fw("sigma", "Sigma"), fw("tau", "Tau")] },
+  "/emu/build.json": { source: "0123", version: "9.8.7" }, // (the emulator's version, for the settings window)
 };
 
 /** The made-up web: each package URL's status (200 unless set; "none" for no answer), and what was asked. */
@@ -109,6 +110,33 @@ describe("the board", () => {
     expect(t.$(".fs-name").textContent).toBe("FM-1 · Alpha");
     expect(t.$(".fs-status").textContent).toBe("Alpha is running");
     expect(t.$(".fs-dot").dataset.state).toBe("running");
+  });
+
+  it("shows how fast the emulator runs on this computer, red at real time or below, and not once it stops", async () => {
+    const t = await table();
+    await until(() => synth()?.plays.length);
+    const perf = t.$(".fs-perf");
+    synth().perf(3, 0.2); // (a report before the firmware runs is not shown)
+    expect(perf.hidden).toBe(true);
+    synth().status("running", "Alpha is running");
+    synth().perf(22.4, 0.05);
+    expect(perf.hidden).toBe(false);
+    expect(perf.textContent).toBe("22x real time · load 5%");
+    expect(perf.classList.contains("fs-slow")).toBe(false);
+    synth().perf(1, 0.97);
+    expect(perf.textContent).toBe("1.0x real time · load 97%");
+    expect(perf.classList.contains("fs-slow")).toBe(true);
+    synth().perf(1.3, 0.8);
+    expect(perf.classList.contains("fs-slow")).toBe(false);
+    // another firmware: none until it runs and reports
+    t.phone("firmware", { id: "beta", name: "Beta", device: "fm1" });
+    await until(() => synth().plays.length === 2);
+    expect(perf.hidden).toBe(true);
+    // a finished game shows none
+    synth().status("running", "Beta is running");
+    synth().perf(5, 0.2);
+    t.phone("finish", {});
+    expect(perf.hidden).toBe(true);
   });
 
   it("passes over a first firmware whose package is gone, without a word, and leaves it out of the window", async () => {
@@ -249,12 +277,13 @@ describe("the board", () => {
     await until(() => synth().plays.length === 3);
     expect(synth().plays[2]).toEqual({ id: "alpha", mhz: 160 });
     expect(synth().volume).toBe(0.4);
-    // the settings window offers the device, the volume, the clock, the firmware window and Restart
+    // the settings window offers the device, the volume, the clock, the firmware window, Restart and names the emulator
     // @ts-expect-error: a plain module of the game\'s UIs
     const board = await import("../games/fm1-synth/board.js");
     const items = board.settings({ info: t.info, setPrefs: () => {} });
-    expect(items.map((i: { label: string }) => i.label)).toEqual(["Device", "Volume", "Emulated clock", "Firmware", "Restart"]);
+    expect(items.map((i: { label: string }) => i.label)).toEqual(["Device", "Volume", "Emulated clock", "Firmware", "Restart", "Emulator"]);
     expect(items[0].value).toBe("fm1");
+    expect(items[5]).toEqual({ type: "text", label: "Emulator", value: "fm1-emu 9.8.7" });
   });
 
   it("stops on Finish: no buttons, the emulator flushed", async () => {

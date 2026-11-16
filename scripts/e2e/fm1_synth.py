@@ -19,7 +19,7 @@ The firmwares come from their authors' sites (thefirmwarehub.com, genkigenki.git
 internet, as a table does; which ones it plays comes from the game's catalogs, not from this check. Starts its own Table Host from .games-service with GAMES_DIR pointing at this repo's games/.
   python3 scripts/e2e/fm1_synth.py out/
 """
-import json, os, sys, time
+import json, os, re, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -129,6 +129,9 @@ def main():
             # (the FM-1's first firmware, or the next when its package is gone)
             fm1_first = wait_running(board, deck)
             wait(lambda: board.evaluate(DRAWN), 10, "the panel to be drawn")
+            # how the emulator keeps up on this computer (E-018), measured once a second
+            wait(lambda: re.fullmatch(r"[\d.]+x real time · load \d+%", board.locator(".fs-perf").inner_text()), 10,
+                 "the board to show the emulator's speed and load")
             assert board.locator(".fs-tap").is_hidden(), "the board asks for a tap although its sound may play"
             shot(board, "board-fm1")
             check(deck, "phone while playing")
