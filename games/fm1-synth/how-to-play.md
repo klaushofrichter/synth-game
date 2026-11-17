@@ -9,7 +9,7 @@ community's firmwares on it.
 - **Device to start with** picks the FM-1 or the SMK-37; switch any time during the game.
 - **Firmware…** on the board, or your phone's list, switches firmware. Each is downloaded from its author's site, so
   the table needs the internet.
-- **☆** stars a firmware: starred ones come first. **👎** unlikes one: it goes to the end, greyed. The table keeps both.
+- **☆** stars a firmware (shown first), **👎** unlikes one (last, greyed). The table keeps both.
 - **Finish** on your phone ends the session (it asks first).
 
 ## Playing

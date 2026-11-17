@@ -60,7 +60,21 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 /** A table: the game started on `device`, the board mounted on it (playing, or a remote board watching). */
-async function table({ device = "fm1", local = true } = {}) {
+/** The table's game data as the platform hands it to a game (`ctx.store`, games-service D-302), over a Map. */
+function memoryStore(start: Record<string, unknown> = {}) {
+  const data = new Map(Object.entries(start));
+  const copy = (v: unknown) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  return {
+    data,
+    get: async (k: string) => copy(data.get(k)),
+    set: async (k: string, v: unknown) => (v === null || v === undefined ? data.delete(k) : data.set(k, copy(v)), { ok: true }),
+    keys: async () => [...data.keys()],
+    all: async () => Object.fromEntries([...data].map(([k, v]) => [k, copy(v)])),
+    onChange: () => () => {},
+  };
+}
+
+async function table({ device = "fm1", local = true, store = undefined as ReturnType<typeof memoryStore> | undefined } = {}) {
   const { rt } = start(game, 1, { device }, 1, { seats: seats(1) });
   const info = {
     controlSeats: local ? [0] : [],
@@ -83,6 +97,7 @@ async function table({ device = "fm1", local = true } = {}) {
       refresh();
       return r;
     },
+    store,
   };
   inst = board.mount(root, ctx);
   refresh();
@@ -242,6 +257,50 @@ describe("the board", () => {
     expect(t.state()).toMatchObject({ firmware: "beta", choice: 2 });
   });
 
+  it("brings the table's stars and unlikes to the game and keeps the table's copy in step (E-020)", async () => {
+    const store = memoryStore({ favorites: { fm1: ["gamma", 7], smk37: ["tau"] }, unliked: { fm1: ["alpha"] } });
+    const t = await table({ store });
+    await until(() => t.state().shared);
+    expect(t.state()).toMatchObject({ favorites: { fm1: ["gamma"], smk37: ["tau"] }, unliked: { fm1: ["alpha"], smk37: [] }, favSynced: true });
+    // the window: starred first, the unliked one last and greyed, with its unlike on
+    t.$(".fs-pick").click();
+    await until(() => t.$$(".fs-card").length === 3);
+    expect(t.$$(".fs-card").map((c) => c.dataset.id)).toEqual(["gamma", "beta", "alpha"]);
+    expect(t.$$(".fs-card.unliked").map((c) => c.dataset.id)).toEqual(["alpha"]);
+    expect(t.$(".fs-card[data-id=alpha] .fs-unlike").getAttribute("aria-pressed")).toBe("true");
+    // an unlike on the board goes to the game and from there to the table; the card stays in place, greyed
+    t.$(".fs-card[data-id=beta] .fs-unlike").click();
+    await until(() => (store.data.get("unliked") as any)?.fm1.length === 2);
+    expect(store.data.get("unliked")).toEqual({ fm1: ["alpha", "beta"], smk37: [] });
+    await until(() => t.$$(".fs-card.unliked").length === 2);
+    expect(t.$$(".fs-card").map((c) => c.dataset.id)).toEqual(["gamma", "beta", "alpha"]);
+    expect((t.$(".fs-picker") as any).hidden).toBe(false);
+    // the unlike taken off again; a star from the phone: the table has both
+    t.$(".fs-card[data-id=alpha] .fs-unlike").click();
+    t.phone("star", { device: "fm1", id: "alpha", on: true });
+    await until(() => (store.data.get("favorites") as any).fm1[0] === "alpha");
+    expect(store.data.get("favorites")).toEqual({ fm1: ["alpha", "gamma"], smk37: ["tau"] });
+    await until(() => (store.data.get("unliked") as any).fm1.length === 1);
+    expect(store.data.get("unliked")).toEqual({ fm1: ["beta"], smk37: [] });
+    // opened again: the newest star first, the unliked one last
+    t.$(".fs-close").click();
+    t.$(".fs-pick").click();
+    await until(() => t.$$(".fs-card")[0]?.dataset.id === "alpha");
+    expect(t.$$(".fs-card").map((c) => c.dataset.id)).toEqual(["alpha", "gamma", "beta"]);
+  });
+
+  it("a board that only watches leaves the table's lists alone, and a table without game data plays as before", async () => {
+    const store = memoryStore({ favorites: { fm1: ["gamma"] } });
+    const watching = await table({ store, local: false });
+    watching.refresh();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(watching.state()).toMatchObject({ shared: false, favorites: { fm1: [] } });
+    const old = await table();
+    old.refresh();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(old.state()).toMatchObject({ shared: false, favSynced: false });
+  });
+
   it("scrolls its list by a drag (no firmware chosen) and by its own wide bar", async () => {
     const t = await table();
     await until(() => synth()?.plays.length);
@@ -366,7 +425,7 @@ describe("the board", () => {
 });
 
 /** The phone: the deck mounted on the same game, its intents sent to the rules as the phone's. */
-async function phoneOn({ device = "fm1" } = {}) {
+async function phoneOn({ device = "fm1", store = undefined as ReturnType<typeof memoryStore> | undefined } = {}) {
   const { rt } = start(game, 1, { device }, 1, { seats: seats(1) });
   // @ts-expect-error: a plain module of the game\'s UIs
   const deck = await import("../games/fm1-synth/deck.js");
@@ -379,9 +438,11 @@ async function phoneOn({ device = "fm1" } = {}) {
     assetUrl: (p: string) => `/${p}`,
     send: (name: string, payload: unknown) => {
       sent.push({ name, payload });
-      rt.submit(0, { name, payload } as any, "human");
+      const r = rt.submit(0, { name, payload } as any, "human");
       queueMicrotask(refresh);
+      return Promise.resolve(r);
     },
+    store,
   };
   inst = deck.mount(root, ctx);
   const $ = (s: string) => root.querySelector(s) as HTMLElement;
@@ -402,20 +463,59 @@ describe("the phone", () => {
     const before = p.state();
     p.inst.update(before);
     p.inst.update(before);
-    expect(p.sent.filter((s) => s.name === "favorites")).toEqual([{ name: "favorites", payload: { list: { fm1: ["gamma"], smk37: ["tau"] } } }]);
+    expect(p.sent.filter((s) => s.name === "favorites")).toEqual([{ name: "favorites", payload: { list: { fm1: ["gamma"], smk37: ["tau"] }, unliked: { fm1: [], smk37: [] } } }]);
     await until(() => p.state().favSynced);
     p.refresh();
     p.refresh();
     expect(p.sent.filter((s) => s.name === "favorites").length).toBe(1);
     p.board("star", { device: "fm1", id: "beta", on: true });
     expect(JSON.parse(localStorage.getItem("fm1-synth.favorites")!)).toEqual({ fm1: ["beta", "gamma"], smk37: ["tau"] });
+    // an unlike is kept the same way on a table without game data (E-020)
+    p.board("unlike", { device: "fm1", id: "alpha", on: true });
+    expect(JSON.parse(localStorage.getItem("fm1-synth.unliked")!)).toEqual({ fm1: ["alpha"], smk37: [] });
+  });
+
+  it("on a table with game data, moves its old stars to the table once and keeps nothing itself (E-020)", async () => {
+    localStorage.setItem("fm1-synth.favorites", JSON.stringify({ fm1: ["gamma"], smk37: [] }));
+    const p = await phoneOn({ store: memoryStore() });
+    p.refresh();
+    p.refresh();
+    expect(p.sent).toEqual([]); // the board brings the table's lists first
+    p.board("favorites", { list: { fm1: ["beta"], smk37: [] }, unliked: { fm1: [], smk37: [] }, shared: true });
+    await until(() => localStorage.getItem("fm1-synth.favorites.moved") === "1");
+    expect(p.sent).toEqual([{ name: "favorites", payload: { list: { fm1: ["gamma"], smk37: [] }, unliked: { fm1: [], smk37: [] }, merge: true } }]);
+    expect(p.state()).toMatchObject({ favorites: { fm1: ["beta", "gamma"], smk37: [] }, shared: true });
+    p.board("star", { device: "fm1", id: "alpha", on: true });
+    p.refresh();
+    expect(p.sent).toHaveLength(1); // once
+    expect(JSON.parse(localStorage.getItem("fm1-synth.favorites")!)).toEqual({ fm1: ["gamma"], smk37: [] }); // not written any more
+    // the next game on this phone: nothing to move
+    const again = await phoneOn({ store: memoryStore() });
+    again.board("favorites", { list: { fm1: [], smk37: [] }, shared: true });
+    again.refresh();
+    expect(again.sent).toEqual([]);
+  });
+
+  it("unlikes from its list: greyed at once, last when the list is drawn anew, and a star takes it off (E-020)", async () => {
+    const p = await phoneOn({ store: memoryStore() });
+    p.board("favorites", { list: { fm1: [], smk37: [] }, shared: true });
+    await until(() => p.$$(".fd-row").length === 3);
+    (p.$$(".fd-row")[0].querySelector(".fd-unlike") as HTMLElement).click();
+    await until(() => p.state().unliked.fm1.length);
+    expect(p.sent.at(-1)).toEqual({ name: "unlike", payload: { device: "fm1", id: "alpha", on: true } });
+    await until(() => p.$(".fd-row.unliked"));
+    expect(p.$$(".fd-fw").map((b) => b.dataset.id)).toEqual(["alpha", "beta", "gamma"]); // in place under the finger
+    expect(p.$(".fd-row.unliked .fd-unlike").getAttribute("aria-pressed")).toBe("true");
+    (p.$(".fd-row.unliked .fd-star") as HTMLElement).click();
+    await until(() => p.state().favorites.fm1.length);
+    expect(p.state()).toMatchObject({ favorites: { fm1: ["alpha"] }, unliked: { fm1: [] } });
   });
 
   it("starts without stars from a browser that has none or bad ones", async () => {
     localStorage.setItem("fm1-synth.favorites", "{not json");
     const p = await phoneOn();
     p.refresh();
-    expect(p.sent[0]).toEqual({ name: "favorites", payload: { list: { fm1: [], smk37: [] } } });
+    expect(p.sent[0]).toEqual({ name: "favorites", payload: { list: { fm1: [], smk37: [] }, unliked: { fm1: [], smk37: [] } } });
   });
 
   it("lists the board's device's firmwares, starred first, without those that are gone", async () => {

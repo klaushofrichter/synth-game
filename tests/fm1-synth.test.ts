@@ -115,6 +115,53 @@ describe("FM-1 Synth", () => {
     rt.submit(0, { name: "finish", payload: {} }, "human");
     expect(replaysExactly(game, rt)).toBe(true);
   });
+
+  it("unlikes firmwares newest last; a firmware is starred or unliked, never both (E-020)", () => {
+    const { rt } = start(game, 1, {}, 1, one());
+    const mark = (name: "star" | "unlike", id: string, on: boolean, by = "board") => rt.submit(0, { name, payload: { device: "fm1", id, on } }, by as any);
+    const lists = () => [(rt.boardView() as any).favorites.fm1, (rt.boardView() as any).unliked.fm1];
+    expect(rt.boardView()).toMatchObject({ unliked: { fm1: [], smk37: [] }, shared: false });
+    expect(mark("unlike", "amb", true)).toEqual({ ok: true });
+    mark("unlike", "felucca", true, "human");
+    expect(lists()).toEqual([[], ["amb", "felucca"]]);
+    mark("unlike", "amb", true); // again: to the end
+    expect(lists()).toEqual([[], ["felucca", "amb"]]);
+    mark("star", "amb", true); // a star takes the unlike off
+    expect(lists()).toEqual([["amb"], ["felucca"]]);
+    mark("unlike", "amb", true); // an unlike takes the star off
+    expect(lists()).toEqual([[], ["felucca", "amb"]]);
+    mark("star", "felucca", false); // a star off leaves the unlike
+    expect(lists()).toEqual([[], ["felucca", "amb"]]);
+    mark("unlike", "felucca", false);
+    mark("unlike", "nothing-there", false);
+    expect(lists()).toEqual([[], ["amb"]]);
+    for (const bad of [{ device: "tr808", id: "x", on: true }, { device: "fm1", id: "../x", on: true }]) expect(rt.submit(0, { name: "unlike", payload: bad }, "board").ok).toBe(false);
+    rt.submit(0, { name: "finish", payload: {} }, "human");
+    replaysExactly(game, rt);
+  });
+
+  it("takes the table's lists from the board, a phone's old list on top, and keeps them when the seat changes hands (E-020)", () => {
+    const { rt } = start(game, 1, {}, 1, one());
+    const send = (payload: unknown, by = "board") => rt.submit(0, { name: "favorites", payload }, by as any);
+    rt.submit(0, { name: "star", payload: { device: "fm1", id: "early", on: true } }, "board"); // before the table's came
+    rt.submit(0, { name: "unlike", payload: { device: "fm1", id: "felucca", on: true } }, "board");
+    // a phone's old list waits for the table's
+    send({ list: { fm1: ["old-phone"] }, merge: true }, "human");
+    expect((rt.boardView() as any).favorites.fm1).toEqual(["early", "old-phone"]); // (taken as the first list: no table's yet)
+    expect(send({ list: { fm1: ["amb", "felucca", "../x"], smk37: ["erik37"] }, unliked: { fm1: ["early", "bad one", "zap"], smk37: [] }, shared: true })).toEqual({ ok: true });
+    // what was given in this game stays: "early" starred (not unliked), "felucca" unliked (not starred)
+    expect(rt.boardView()).toMatchObject({ favorites: { fm1: ["early", "old-phone", "amb"], smk37: ["erik37"] }, unliked: { fm1: ["zap", "felucca"], smk37: [] }, favSynced: true, shared: true });
+    // the table's come once; a phone's old list is added, without what the table unlikes
+    send({ list: { fm1: ["zzz"] }, shared: true });
+    send({ list: { fm1: ["zap", "from-phone"] }, unliked: { fm1: ["amb", "meh"] }, merge: true }, "human");
+    expect(rt.boardView()).toMatchObject({ favorites: { fm1: ["early", "old-phone", "amb", "from-phone"] }, unliked: { fm1: ["meh", "zap", "felucca"] } });
+    send({ list: { fm1: ["later"] } }, "human"); // without merge: ignored
+    expect((rt.boardView() as any).favorites.fm1).not.toContain("later");
+    rt.seatChanged({ seat: 0, playerId: "p9", name: "Zoe", kind: "human", edge: "south" });
+    expect(rt.boardView()).toMatchObject({ favorites: { fm1: ["early", "old-phone", "amb", "from-phone"] }, shared: true, favSynced: true });
+    rt.submit(0, { name: "finish", payload: {} }, "human");
+    replaysExactly(game, rt);
+  });
 });
 
 describe("the devices", () => {
