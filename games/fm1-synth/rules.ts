@@ -201,7 +201,7 @@ export default defineGame<State>({
           // an unlike from before gives way to a star (here or in the list that came)
           unliked[d] = [...new Set([...ids(sentDown[d]), ...state.unliked[d]])].filter((id) => !favorites[d].includes(id)).slice(-MAX_FAVORITES);
         }
-        const next = { ...state, favorites, unliked, favSynced: true, shared: state.shared || p.shared === true };
+        const next = { ...state, favorites, unliked, favSynced: true, shared: state.shared || tables };
         if (JSON.stringify([next.favorites, next.unliked, next.shared]) === JSON.stringify([state.favorites, state.unliked, state.shared]) && state.favSynced) return { state };
         return { state: next };
       }

@@ -289,6 +289,37 @@ describe("the board", () => {
     expect(t.$$(".fs-card").map((c) => c.dataset.id)).toEqual(["alpha", "gamma", "beta"]);
   });
 
+  it("never takes a table it could not ask for one without stars, and tries a refused write again (E-022)", async () => {
+    const store = memoryStore({ favorites: { fm1: ["gamma"], smk37: [] } });
+    const get = store.get;
+    let down = true;
+    store.get = async (k: string) => {
+      if (down) throw new Error("the table's game data could not be read: no answer");
+      return get(k);
+    };
+    const t = await table({ store });
+    t.refresh();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(t.state()).toMatchObject({ shared: false, favorites: { fm1: [] } }); // nothing sent as "the table's"
+    t.phone("star", { device: "fm1", id: "beta", on: true }); // given meanwhile
+    expect(store.data.get("favorites")).toEqual({ fm1: ["gamma"], smk37: [] }); // and nothing written over the table's
+    await new Promise((r) => setTimeout(r, 20)); // (the attempt under way has failed)
+    down = false;
+    t.refresh();
+    await until(() => t.state().shared);
+    expect(t.state().favorites.fm1).toEqual(["beta", "gamma"]);
+    await until(() => (store.data.get("favorites") as any).fm1.length === 2);
+    // a write the table refuses is tried again
+    const set = store.set;
+    let refused = 1;
+    store.set = async (k: string, v: unknown) => (refused-- > 0 ? { ok: false, reason: "Too many changes at once" } : set(k, v));
+    t.phone("star", { device: "fm1", id: "alpha", on: true });
+    await new Promise((r) => setTimeout(r, 20));
+    expect((store.data.get("favorites") as any).fm1).toEqual(["beta", "gamma"]);
+    t.refresh(); // (or three seconds later by itself)
+    await until(() => (store.data.get("favorites") as any).fm1[0] === "alpha");
+  });
+
   it("a board that only watches leaves the table's lists alone, and a table without game data plays as before", async () => {
     const store = memoryStore({ favorites: { fm1: ["gamma"] } });
     const watching = await table({ store, local: false });
