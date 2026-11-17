@@ -140,3 +140,11 @@ Records are history: an older record is not edited when a newer one changes it. 
   not on the phone. The settings window names the emulator, "fm1-emu 0.5.1": upstream's workspace version from
   `Cargo.toml`, written into `assets/emu/build.json` by `tools/build_game.sh` (a test keeps it current). *Why:* Klaus
   asked for upstream's performance indicator, to see whether a table's computer is fast enough.
+- **E-019 · 2026-11-17 · Klaus** — The firmware window is made for a finger on the table's touchscreen. Its four
+  columns of cards shrink to the window's width (no sideways scroll; long names and words break). The list scrolls
+  by dragging it, with a finger or the mouse (a table's touchscreen may reach the browser as a mouse, where the
+  browser's own touch scrolling does nothing), and by a bar of its own, 44 px wide instead of the browser's thin
+  one: drag its thumb, or tap above or below it for a page. A drag is never a tap on the card it started on; a flick
+  runs on. The FM-1 / SMK-37 tabs are two buttons, each framed in the platform's green, the chosen one brass (the
+  green frame around both, from E-011, looked odd). *Why:* Klaus, on the table's touchscreen: the list scrolled
+  sideways, and its scrollbar was too thin to use.
