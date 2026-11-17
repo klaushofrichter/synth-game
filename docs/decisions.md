@@ -169,3 +169,7 @@ Records are history: an older record is not edited when a newer one changes it. 
     player's.
   *Checks:* `tests/fm1-synth.test.ts` (unlike, the table's lists, the merge, a seat change), `tests/ui.test.ts` (the
   board with a store, a watching board, the phone's move, unlike on both).
+- **E-021 · 2026-11-17 · Klaus** — A second simplify pass ("do a /simplify … over games-service and all *-game
+  repos"; games-service D-303), over the game only (not the emulator). The board keeps the table's copy of each list
+  as its own string instead of parsing and re-stringifying both to see which changed; the rules reuse what they had
+  worked out (`tables`); `playOut` goes from the test harness (copied from another repository, never used here).

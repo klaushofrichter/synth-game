@@ -305,7 +305,7 @@ export function mount(root, ctx) {
   // here. The board that plays brings them to the game once, then keeps the table's copy in step with the game's. On a
   // table without game data (an older platform) the phone keeps its own, as before (E-013).
   let tableAsked = false;
-  let tableHas = null; // the table's copy, as JSON
+  let tableHas = null; // the table's copy of each list, as JSON
   async function syncTable() {
     if (!ctx.store || !plays() || !view || view.done) return;
     if (!view.shared) {
@@ -313,17 +313,17 @@ export function mount(root, ctx) {
       tableAsked = true;
       const list = cleanLists(await ctx.store.get("favorites"));
       const unliked = cleanLists(await ctx.store.get("unliked"));
-      tableHas = JSON.stringify([list, unliked]);
+      tableHas = { favorites: JSON.stringify(list), unliked: JSON.stringify(unliked) };
       const r = await ctx.act(playerSeat(), "favorites", { list, unliked, shared: true });
       if (!r?.ok) tableAsked = false; // (asked again with the next update)
       return;
     }
-    const now = [view.favorites, view.unliked];
-    if (JSON.stringify(now) === tableHas) return;
-    const had = tableHas ? JSON.parse(tableHas) : [null, null];
-    tableHas = JSON.stringify(now);
-    if (JSON.stringify(had[0]) !== JSON.stringify(now[0])) ctx.store.set("favorites", now[0]);
-    if (JSON.stringify(had[1]) !== JSON.stringify(now[1])) ctx.store.set("unliked", now[1]);
+    for (const key of ["favorites", "unliked"]) {
+      const now = JSON.stringify(view[key]);
+      if (now === tableHas?.[key]) continue;
+      (tableHas ??= {})[key] = now;
+      ctx.store.set(key, view[key]);
+    }
   }
 
   const scroller = dragScroll($(".fs-list"), $(".fs-scroll"), () => (box.classList.contains("fs-north") ? -1 : 1));
