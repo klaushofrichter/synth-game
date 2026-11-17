@@ -163,6 +163,27 @@ def main():
                  "the phone to keep the star")
             assert deck.locator(f".fd-star.starred[data-id='{fav}']").count(), "the phone shows no star"
             shot(board, "picker-favorite")
+            # The window's list (E-019): no sideways scroll, a wide bar of its own, and a drag with the mouse (a table's
+            # touchscreen may reach the browser as one) scrolls it without choosing the card it started on.
+            sizes = board.evaluate("""() => { const l = document.querySelector('.fs-list'), b = document.querySelector('.fs-scroll');
+              return { over: l.scrollWidth - l.clientWidth, room: l.scrollHeight - l.clientHeight, bar: b.hidden ? 0 : b.offsetWidth }; }""")
+            assert sizes["over"] <= 0, f"the firmware list scrolls sideways by {sizes['over']} px"
+            assert sizes["room"] > 0 and sizes["bar"] >= 36, f"the list's own bar is missing or thin: {sizes}"
+            top = lambda: board.evaluate("() => document.querySelector('.fs-list').scrollTop")
+            r = board.locator(".fs-card").nth(9).bounding_box()
+            board.mouse.move(r["x"] + r["width"] / 2, r["y"] + r["height"] / 2)
+            board.mouse.down()
+            board.mouse.move(r["x"] + r["width"] / 2, r["y"] + r["height"] / 2 - 300, steps=10)
+            board.mouse.up()
+            assert top() > 200, f"a drag scrolled the list by {top()} px only"
+            assert not board.locator(".fs-picker").is_hidden() and playing(board) == fm1_first, "a drag chose a firmware"
+            t = board.locator(".fs-thumb").bounding_box()
+            before = top()
+            board.mouse.move(t["x"] + t["width"] / 2, t["y"] + 10)
+            board.mouse.down()
+            board.mouse.move(t["x"] + t["width"] / 2, t["y"] + 110, steps=5)
+            board.mouse.up()
+            assert top() > before + 100, f"dragging the bar moved the list from {before} to {top()} px only"
             board.click(".fs-close")
 
             # The firmware window: its SMK-37 tab switches the board to the SMK-37 at once, on its first firmware, as

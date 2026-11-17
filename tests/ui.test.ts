@@ -242,6 +242,53 @@ describe("the board", () => {
     expect(t.state()).toMatchObject({ firmware: "beta", choice: 2 });
   });
 
+  it("scrolls its list by a drag (no firmware chosen) and by its own wide bar", async () => {
+    const t = await table();
+    await until(() => synth()?.plays.length);
+    t.$(".fs-pick").click();
+    await until(() => t.$$(".fs-card").length === 3);
+    const list = t.$(".fs-list"), bar = t.$(".fs-scroll"), thumb = t.$(".fs-thumb");
+    expect(bar.hidden).toBe(true); // (all of it fits)
+    // a long list: 2000 px in a 500 px window, its bar 400 px tall
+    let top = 0;
+    Object.defineProperties(list, {
+      scrollHeight: { value: 2000, configurable: true },
+      clientHeight: { value: 500, configurable: true },
+      scrollTop: { get: () => top, set: (v: number) => (top = Math.max(0, Math.min(1500, v))), configurable: true },
+    });
+    Object.defineProperty(bar, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(thumb, "offsetHeight", { value: 100, configurable: true });
+    t.inst.openPicker();
+    await until(() => !bar.hidden);
+    expect(thumb.style.height).toBe("100px");
+    const pointer = (el: HTMLElement, type: string, y: number) =>
+      el.dispatchEvent(new (globalThis as any).PointerEvent(type, { bubbles: true, pointerId: 1, clientY: y, button: 0 }));
+    // a drag up by 300 px on a card scrolls down by 300; the card is not chosen
+    const card = t.$(".fs-card[data-id=beta]");
+    pointer(card, "pointerdown", 600);
+    pointer(card, "pointermove", 590); // (a little wander is still a tap)
+    expect(top).toBe(0);
+    pointer(card, "pointermove", 300);
+    expect(top).toBe(300);
+    pointer(card, "pointerup", 300);
+    card.click();
+    expect((t.$(".fs-picker") as any).hidden).toBe(false);
+    expect(t.state().firmware).toBe("alpha");
+    list.dispatchEvent(new (globalThis as any).Event("scroll"));
+    expect(thumb.style.transform).toBe("translateY(60px)"); // (300 of 1500, along 300 px of track)
+    // the thumb dragged down by 30 px: a tenth of its track, 150 px of the list
+    pointer(thumb, "pointerdown", 100);
+    pointer(thumb, "pointermove", 130);
+    pointer(thumb, "pointerup", 130);
+    expect(top).toBe(450);
+    // a plain tap still chooses
+    pointer(card, "pointerdown", 600);
+    pointer(card, "pointerup", 600);
+    card.click();
+    await until(() => synth().plays.length === 2);
+    expect(t.state().firmware).toBe("beta");
+  });
+
   it("switches the device from the window's tab, on that device's first firmware", async () => {
     const t = await table();
     await until(() => synth()?.plays.length);
