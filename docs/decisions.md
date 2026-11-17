@@ -173,3 +173,12 @@ Records are history: an older record is not edited when a newer one changes it. 
   repos"; games-service D-303), over the game only (not the emulator). The board keeps the table's copy of each list
   as its own string instead of parsing and re-stringifying both to see which changed; the rules reuse what they had
   worked out (`tables`); `playOut` goes from the test harness (copied from another repository, never used here).
+- **E-022 · 2026-11-17 · Klaus** — Fixes from the code review of all game repositories (games-service D-304), in how
+  the board keeps the table's stars and unlikes (E-020).
+  - **A table that could not be asked was taken for one without stars.** If the board's connection was not up when
+    the game started, the read gave nothing, the game began with no stars "from the table", and the first star wrote
+    that single one over the table's lists. The platform's read now throws when the table gives no answer; the board
+    asks again (with the next update, or after three seconds) and brings nothing until it has an answer.
+  - **A write the table refused was never tried again,** and went unnoticed: the board noted a list as saved before
+    it was. It now notes it once the table has it and tries again, also when nothing else changes.
+  *Check:* `tests/ui.test.ts` ("never takes a table it could not ask for one without stars…").

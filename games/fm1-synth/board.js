@@ -306,24 +306,45 @@ export function mount(root, ctx) {
   // table without game data (an older platform) the phone keeps its own, as before (E-013).
   let tableAsked = false;
   let tableHas = null; // the table's copy of each list, as JSON
+  let tableWriting = false;
+  let tableRetry = null;
   async function syncTable() {
-    if (!ctx.store || !plays() || !view || view.done) return;
+    if (dead || !ctx.store || !plays() || !view || view.done) return;
     if (!view.shared) {
       if (tableAsked) return;
       tableAsked = true;
-      const list = cleanLists(await ctx.store.get("favorites"));
-      const unliked = cleanLists(await ctx.store.get("unliked"));
-      tableHas = { favorites: JSON.stringify(list), unliked: JSON.stringify(unliked) };
-      const r = await ctx.act(playerSeat(), "favorites", { list, unliked, shared: true });
-      if (!r?.ok) tableAsked = false; // (asked again with the next update)
+      try {
+        // A table that can't be asked just now throws (games-service D-304): asked again with the next update, never
+        // taken for a table without stars, which would later be written over the ones it keeps.
+        const list = cleanLists(await ctx.store.get("favorites"));
+        const unliked = cleanLists(await ctx.store.get("unliked"));
+        tableHas = { favorites: JSON.stringify(list), unliked: JSON.stringify(unliked) }; // what the table has, as read
+        const r = await ctx.act(playerSeat(), "favorites", { list, unliked, shared: true });
+        if (!r?.ok) tableAsked = false;
+      } catch {
+        tableAsked = false;
+      }
+      // not brought (the table could not be asked, the move was refused): again with the next update, or by itself
+      clearTimeout(tableRetry);
+      if (!tableAsked) tableRetry = setTimeout(syncTable, 3000);
       return;
     }
+    if (tableWriting) return;
+    tableWriting = true;
+    let failed = false;
     for (const key of ["favorites", "unliked"]) {
       const now = JSON.stringify(view[key]);
       if (now === tableHas?.[key]) continue;
-      (tableHas ??= {})[key] = now;
-      ctx.store.set(key, view[key]);
+      const r = await ctx.store.set(key, JSON.parse(now)).catch(() => ({ ok: false }));
+      if (r?.ok) (tableHas ??= {})[key] = now; // the table has it; only now
+      else failed = true;
     }
+    tableWriting = false;
+    clearTimeout(tableRetry);
+    // Not saved (too many changes at once, the connection): tried again, also when nothing else changes. Saved: once
+    // more for what changed while it was being written.
+    if (failed) tableRetry = setTimeout(syncTable, 3000);
+    else if (["favorites", "unliked"].some((key) => JSON.stringify(view[key]) !== tableHas?.[key])) syncTable();
   }
 
   const scroller = dragScroll($(".fs-list"), $(".fs-scroll"), () => (box.classList.contains("fs-north") ? -1 : 1));
@@ -439,6 +460,7 @@ export function mount(root, ctx) {
     },
     destroy() {
       dead = true;
+      clearTimeout(tableRetry);
       ro.disconnect();
       if (live === inst) live = null;
       synth?.destroy();
