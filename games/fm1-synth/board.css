@@ -71,13 +71,13 @@
 .fs-card { user-select: none; -webkit-user-select: none; }
 .fs-card-head { display: flex; align-items: flex-start; gap: 10px; font-size: 22px; }
 .fs-card-head b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fs-card-head .muted { flex: none; padding-top: 3px; font-size: 17px; }
 /* a star: a 56 px target in the card's corner, the card's own tap stays for choosing (E-013) */
 .fs-star { flex: none; width: 56px; height: 56px; margin: -12px -12px -16px 0; padding: 0; border: 0; border-radius: 12px;
   background: transparent; color: var(--ink-soft); font-size: 34px; line-height: 1; cursor: pointer; touch-action: manipulation; }
 .fs-star:hover { background: transparent; border: 0; }
 .fs-star.starred { color: var(--brass, #c8962f); }
-/* an unlike: beside the star, as large a target; pale until it is on. An unliked firmware's card is greyed and comes
+/* an unlike: beside the star, as large a target; pale until it is on. The version moved to the author's line to make
+   room for it (the head scrolled the list sideways with both buttons and a version). An unliked firmware's card is greyed and comes
    last in the list, until the unlike is taken off (E-020); its two buttons stay clear. */
 .fs-unlike { flex: none; width: 56px; height: 56px; margin: -12px -4px -16px auto; padding: 0; border: 0; border-radius: 12px;
   background: transparent; font-size: 26px; line-height: 1; filter: grayscale(1); opacity: 0.35; }

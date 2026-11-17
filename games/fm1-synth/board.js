@@ -267,10 +267,10 @@ export function mount(root, ctx) {
         const gone = unavailable.has(`${device}/${f.id}`);
         const down = downs.has(f.id);
         return `<div role="button" class="fs-card ${here && view?.firmware === f.id ? "on" : ""} ${gone ? "gone" : ""} ${down ? "unliked" : ""}" data-id="${esc(f.id)}">
-        <div class="fs-card-head"><b>${esc(f.name)}</b><span class="muted">${esc(f.version ?? "")}</span>
+        <div class="fs-card-head"><b>${esc(f.name)}</b>
           <button type="button" class="fs-unlike ${down ? "on" : ""}" aria-pressed="${down}" aria-label="${down ? "Take the unlike off" : "Unlike it"}">👎</button>
           <button type="button" class="fs-star ${on ? "starred" : ""}" aria-pressed="${on}" aria-label="${on ? "Remove the star" : "Star it"}">${on ? "★" : "☆"}</button></div>
-        <div class="fs-card-by muted">${esc(f.author ?? "")}</div>
+        <div class="fs-card-by muted">${esc([f.author, f.version].filter(Boolean).join(" · "))}</div>
         <div class="fs-card-about">${gone ? "Can't be downloaded right now. Tap to try again." : esc(f.about ?? "")}</div></div>`;
       })
       .join("");
