@@ -145,23 +145,49 @@ def main():
             touch(board, 0.30, 0.91, 11, "pointerup")
             assert held != before, "a touch on a key changed nothing on the panel"
 
-            # Favorites: a star in the window keeps the order while it is open, puts the firmware first the next time,
-            # and the phone keeps it in its browser (E-013).
+            # Favorites: a star in the window keeps the order while it is open and puts the firmware first the next
+            # time; an unlike greys a firmware and puts it last (E-020). The table keeps both in its game data; on a
+            # Game Table without game data (before games-service D-302) the phone keeps them in its browser (E-013).
+            try:
+                a("GET", "/game-data")
+                kept_by_table = True
+            except Exception:
+                kept_by_table = False
+
+            def kept(what):
+                if kept_by_table:
+                    try:
+                        return (a("GET", "/game-data/fm1-synth")["data"].get(what) or {}).get("fm1", [])
+                    except Exception:
+                        return []
+                return (json.loads(deck.evaluate(f"() => localStorage.getItem('fm1-synth.{what}')") or "{}")).get("fm1", [])
+
             board.click(".fs-pick")
             board.wait_for_selector(".fs-picker:not([hidden]) .fs-card")
-            wait(lambda: deck.evaluate("() => localStorage.getItem('fm1-synth.favorites')") is not None, 10,
-                 "the phone to keep its (empty) stars")
+            if not kept_by_table:
+                wait(lambda: deck.evaluate("() => localStorage.getItem('fm1-synth.favorites')") is not None, 10,
+                     "the phone to keep its (empty) stars")
             fav = board.locator(".fs-card").nth(2).get_attribute("data-id")
+            down = board.locator(".fs-card").nth(1).get_attribute("data-id")
             board.tap(f".fs-card[data-id='{fav}'] .fs-star")
             wait(lambda: board.locator(f".fs-card[data-id='{fav}'] .fs-star.starred").count(), 10, "the star on the board")
             assert board.locator(".fs-card").nth(2).get_attribute("data-id") == fav, "the starred card moved while open"
             assert playing(board) == fm1_first, "a star changed the firmware"
+            board.tap(f".fs-card[data-id='{down}'] .fs-unlike")
+            wait(lambda: board.locator(f".fs-card.unliked[data-id='{down}'] .fs-unlike.on").count(), 10, "the unlike on the board")
+            assert board.locator(".fs-card").nth(1).get_attribute("data-id") == down, "the unliked card moved while open"
+            assert playing(board) == fm1_first, "an unlike changed the firmware"
             board.click(".fs-close")
             board.click(".fs-pick")
             wait(lambda: board.locator(".fs-card").first.get_attribute("data-id") == fav, 10, f"{fav} first in the window")
-            wait(lambda: fav in (deck.evaluate("() => localStorage.getItem('fm1-synth.favorites')") or ""), 10,
-                 "the phone to keep the star")
+            assert board.locator(".fs-card").last.get_attribute("data-id") == down, f"{down} is not last in the window"
+            faded = board.evaluate(f"() => getComputedStyle(document.querySelector(\".fs-card[data-id='{down}'] .fs-card-about\")).opacity")
+            assert float(faded) < 0.6, f"the unliked card is not greyed (opacity {faded})"
+            where = "the table" if kept_by_table else "the phone"
+            wait(lambda: kept("favorites") == [fav], 10, f"{where} to keep the star")
+            wait(lambda: kept("unliked") == [down], 10, f"{where} to keep the unlike")
             assert deck.locator(f".fd-star.starred[data-id='{fav}']").count(), "the phone shows no star"
+            assert deck.locator(f".fd-row.unliked .fd-unlike.on[data-id='{down}']").count(), "the phone shows no unlike"
             shot(board, "picker-favorite")
             # The window's list (E-019): no sideways scroll, a wide bar of its own, and a drag with the mouse (a table's
             # touchscreen may reach the browser as one) scrolls it without choosing the card it started on.
