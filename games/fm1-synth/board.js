@@ -77,7 +77,7 @@ export function mount(root, ctx) {
           <div class="fs-sheet-head"><div><div class="fs-sheet-title"></div><div class="fs-sheet-sub muted">Tap one to play it. It is downloaded from its author's site. Starred ones come first, kept on your phone.</div></div>
             <div class="fs-tabs" role="tablist">${DEVICES.map((d) => `<button class="fs-tab" type="button" role="tab" data-device="${d.id}">${d.name}</button>`).join("")}</div>
             <button class="fs-btn fs-close" type="button" aria-label="Close">Close</button></div>
-          <div class="fs-list"></div>
+          <div class="fs-body"><div class="fs-list"></div><div class="fs-scroll" hidden><div class="fs-thumb"></div></div></div>
         </div>
       </div>
     </div>
@@ -273,6 +273,7 @@ export function mount(root, ctx) {
       .join("");
     const list = $(".fs-list");
     if (rows !== pickerRows) list.innerHTML = pickerRows = rows;
+    scroller.update();
   }
 
   /** The window on a device's list: its order taken anew, from the top. */
@@ -288,6 +289,7 @@ export function mount(root, ctx) {
     picker.hidden = false;
     await renderPicker();
     picker.querySelector(".fs-card.on")?.scrollIntoView({ block: "center" });
+    scroller.update();
   }
 
   /** Switch the board to the other device, on that device's first firmware (the rules ask the board to name it). */
@@ -296,6 +298,7 @@ export function mount(root, ctx) {
     ctx.act(playerSeat(), "device", { device });
   }
 
+  const scroller = dragScroll($(".fs-list"), $(".fs-scroll"), () => (box.classList.contains("fs-north") ? -1 : 1));
   $(".fs-pick").addEventListener("click", openPicker);
   $(".fs-close").addEventListener("click", () => (picker.hidden = true));
   picker.addEventListener("click", (e) => {
@@ -415,4 +418,108 @@ export function mount(root, ctx) {
   };
   live = inst;
   return inst;
+}
+
+/**
+ * The firmware list scrolls by dragging it and by a wide bar of its own (E-019), with any pointer: a table's
+ * touchscreen may reach the browser as a mouse, and the browser's own bar is too thin to hit with a finger. A drag that
+ * moved is not a tap (no firmware chosen); a flick runs on and slows down. `turned()` is -1 while the window is turned
+ * to face north. Returns { update() }: the bar follows the list's size (after the list is drawn anew).
+ */
+function dragScroll(list, bar, turned) {
+  const thumb = bar.firstElementChild;
+  const MOVE = 12; // px a press may wander and still be a tap
+  /** Screen pixels to the list's own, along its height (the board is scaled to the screen, and may be turned). */
+  const factor = (el) => {
+    const r = el.getBoundingClientRect();
+    return (el.offsetHeight && r.height ? el.offsetHeight / r.height : 1) * turned();
+  };
+  const room = () => list.scrollHeight - list.clientHeight;
+  let fling = 0;
+  const stop = () => cancelAnimationFrame(fling);
+
+  function update() {
+    const over = room() > 1;
+    bar.hidden = !over;
+    if (!over) return;
+    const track = bar.clientHeight;
+    const h = Math.max(90, (track * list.clientHeight) / list.scrollHeight);
+    thumb.style.height = `${h}px`;
+    thumb.style.transform = `translateY(${((track - h) * list.scrollTop) / room()}px)`;
+  }
+  list.addEventListener("scroll", update, { passive: true });
+
+  // dragging the list itself
+  let drag = null, dragged = false;
+  list.addEventListener("pointerdown", (e) => {
+    if (e.button > 0 || drag) return;
+    stop();
+    dragged = false;
+    drag = { id: e.pointerId, y: e.clientY, top: list.scrollTop, k: factor(list), last: e.clientY, t: e.timeStamp, v: 0 };
+  });
+  list.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = (e.clientY - drag.y) * drag.k;
+    if (!dragged && Math.abs(dy) < MOVE) return;
+    if (!dragged) {
+      dragged = true;
+      list.setPointerCapture?.(e.pointerId);
+    }
+    list.scrollTop = drag.top - dy;
+    const dt = e.timeStamp - drag.t;
+    if (dt > 0) drag.v = (0.8 * (e.clientY - drag.last) * drag.k) / dt + 0.2 * drag.v;
+    drag.last = e.clientY;
+    drag.t = e.timeStamp;
+  });
+  const release = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    let v = dragged && e.timeStamp - drag.t < 100 ? drag.v : 0; // (px per ms; a drag that paused does not run on)
+    drag = null;
+    let t = performance.now();
+    const run = (now) => {
+      list.scrollTop -= v * (now - t);
+      v *= Math.pow(0.995, now - t);
+      t = now;
+      if (Math.abs(v) > 0.02) fling = requestAnimationFrame(run);
+    };
+    if (Math.abs(v) > 0.1) fling = requestAnimationFrame(run);
+  };
+  list.addEventListener("pointerup", release);
+  list.addEventListener("pointercancel", release);
+  // a drag is not a tap on the card it started on
+  list.addEventListener(
+    "click",
+    (e) => {
+      if (!dragged) return;
+      dragged = false;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    },
+    true,
+  );
+
+  // the bar: drag its thumb, or tap the track above or below it for a page
+  let grab = null;
+  bar.addEventListener("pointerdown", (e) => {
+    if (e.button > 0) return;
+    stop();
+    e.preventDefault();
+    if (e.target === thumb) {
+      const ratio = room() / Math.max(1, bar.clientHeight - thumb.offsetHeight);
+      grab = { id: e.pointerId, y: e.clientY, top: list.scrollTop, k: factor(bar) * ratio };
+      bar.setPointerCapture?.(e.pointerId);
+      return;
+    }
+    const r = thumb.getBoundingClientRect();
+    const below = (e.clientY > r.bottom) === turned() > 0;
+    list.scrollTop += (below ? 1 : -1) * 0.9 * list.clientHeight;
+  });
+  bar.addEventListener("pointermove", (e) => {
+    if (grab && e.pointerId === grab.id) list.scrollTop = grab.top + (e.clientY - grab.y) * grab.k;
+  });
+  const letGo = (e) => grab && e.pointerId === grab.id && (grab = null);
+  bar.addEventListener("pointerup", letGo);
+  bar.addEventListener("pointercancel", letGo);
+
+  return { update };
 }
