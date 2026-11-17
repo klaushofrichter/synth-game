@@ -29,11 +29,16 @@ export interface State {
   seat: number;
   done: boolean;
   endedAt: number | null;
-  /** The player's starred firmwares per device, newest star first (E-013). Kept on the player's phone between games:
-   * the phone sends its list once (`favorites`), then keeps a copy of this one. */
+  /** The starred firmwares per device, newest star first (E-013). Kept on the table between games (E-020): the board
+   * sends the table's lists once (`favorites`), then keeps the table's copy in step with these. On a table without
+   * game data, the phone does that with its own list, as before. */
   favorites: Record<Device, string[]>;
-  /** The phone has sent its list (for this player). */
+  /** The unliked firmwares per device, newest last (E-020): shown greyed at the end of the lists. Never also starred. */
+  unliked: Record<Device, string[]>;
+  /** The lists from earlier games have come (the table's, or the phone's for this player). */
   favSynced: boolean;
+  /** The lists are the table's (E-020), shared by everyone who plays here: they stay when the seat changes hands. */
+  shared: boolean;
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
@@ -84,7 +89,9 @@ function view(s: State) {
     seat: s.seat,
     done: s.done,
     favorites: s.favorites,
+    unliked: s.unliked,
     favSynced: s.favSynced,
+    shared: s.shared,
   };
 }
 
@@ -97,6 +104,10 @@ function describeStep(step: StepInfo<State>): StepDescription | null {
   if (name === "star" && step.accepted) {
     const p = step.intent.payload as { id?: string; on?: boolean };
     return { text: `${p.on ? "stars" : "unstars"} ${p.id}` };
+  }
+  if (name === "unlike" && step.accepted) {
+    const p = step.intent.payload as { id?: string; on?: boolean };
+    return { text: `${p.on ? "unlikes" : "takes the unlike off"} ${p.id}` };
   }
   if (name === "finish") return { text: "is done playing" };
   return null;
@@ -117,7 +128,9 @@ export default defineGame<State>({
       done: false,
       endedAt: null,
       favorites: noFavorites(),
+      unliked: noFavorites(),
       favSynced: false,
+      shared: false,
     };
   },
 
@@ -152,27 +165,45 @@ export default defineGame<State>({
         if (next.state === state.status.state && next.text === state.status.text) return { state };
         return { state: { ...state, status: next } };
       }
-      case "star": {
-        // a star on (to the front: newest first) or off, from the board's firmware window or the phone (E-013)
+      case "star":
+      case "unlike": {
+        // A star on (to the front: newest first) or off, or an unlike on (to the end: newest last) or off, from the
+        // board's firmware window or the phone (E-013, E-020). A firmware has one or neither: a star takes the unlike
+        // off, an unlike takes the star off.
         const device = p.device as Device;
         const id = typeof p.id === "string" ? p.id : "";
         if (!DEVICES.includes(device)) return { reject: "That is not a device of this game" };
         if (!ID.test(id)) return { reject: "That is not a firmware of this device" };
-        const rest = state.favorites[device].filter((f) => f !== id);
-        const list = p.on === true ? [id, ...rest].slice(0, MAX_FAVORITES) : rest;
-        if (list.join() === state.favorites[device].join()) return { state };
-        return { state: { ...state, favorites: { ...state.favorites, [device]: list } } };
+        const on = p.on === true;
+        const star = intent.name === "star";
+        // off: only its own list changes; on: it goes to its list and leaves the other
+        let favorites = !on && !star ? state.favorites[device] : state.favorites[device].filter((f) => f !== id);
+        let down = !on && star ? state.unliked[device] : state.unliked[device].filter((f) => f !== id);
+        if (on && star) favorites = [id, ...favorites].slice(0, MAX_FAVORITES);
+        if (on && !star) down = [...down, id].slice(-MAX_FAVORITES);
+        if (favorites.join() === state.favorites[device].join() && down.join() === state.unliked[device].join()) return { state };
+        return { state: { ...state, favorites: { ...state.favorites, [device]: favorites }, unliked: { ...state.unliked, [device]: down } } };
       }
       case "favorites": {
-        // the phone's list from earlier games, once; stars given before it came stay in front (newer)
-        if (state.favSynced) return { state };
+        // The lists from earlier games: the table's, sent by the board (`shared`, E-020), or on a table without game
+        // data the phone's, once. Stars and unlikes given before they came stay (newer). `merge` adds a phone's old
+        // list to the table's, once the table's are here (the move from the phone to the table).
+        const merge = p.merge === true && state.shared;
+        const tables = p.shared === true && !state.shared; // the table's lists come once, whatever came before
+        if (state.favSynced && !merge && !tables) return { state };
+        const ids = (v: unknown) => (Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === "string" && ID.test(x)) : []);
         const sent = (p.list ?? {}) as Record<string, unknown>;
+        const sentDown = (p.unliked ?? {}) as Record<string, unknown>;
         const favorites = noFavorites();
+        const unliked = noFavorites();
         for (const d of DEVICES) {
-          const theirs = Array.isArray(sent[d]) ? (sent[d] as unknown[]).filter((x): x is string => typeof x === "string" && ID.test(x)) : [];
-          favorites[d] = [...new Set([...state.favorites[d], ...theirs])].slice(0, MAX_FAVORITES);
+          favorites[d] = [...new Set([...state.favorites[d], ...ids(sent[d])])].filter((id) => !state.unliked[d].includes(id)).slice(0, MAX_FAVORITES);
+          // an unlike from before gives way to a star (here or in the list that came)
+          unliked[d] = [...new Set([...ids(sentDown[d]), ...state.unliked[d]])].filter((id) => !favorites[d].includes(id)).slice(-MAX_FAVORITES);
         }
-        return { state: { ...state, favorites, favSynced: true } };
+        const next = { ...state, favorites, unliked, favSynced: true, shared: state.shared || p.shared === true };
+        if (JSON.stringify([next.favorites, next.unliked, next.shared]) === JSON.stringify([state.favorites, state.unliked, state.shared]) && state.favSynced) return { state };
+        return { state: next };
       }
       case "finish":
         return { state: { ...state, done: true, endedAt: ctx.now() }, events: [{ name: "finished" }] };
@@ -195,8 +226,10 @@ export default defineGame<State>({
   },
 
   onSeatChanged(state, seat) {
-    // another person: their phone brings their own stars (E-013)
-    return { state: { ...state, player: seat.name, favorites: noFavorites(), favSynced: false } };
+    // The table's stars and unlikes are everyone's who plays here (E-020). On a table without game data they are the
+    // player's own: another person's phone brings theirs (E-013).
+    if (state.shared) return { state: { ...state, player: seat.name } };
+    return { state: { ...state, player: seat.name, favorites: noFavorites(), unliked: noFavorites(), favSynced: false } };
   },
 
   describe: describeStep,

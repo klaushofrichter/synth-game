@@ -2,7 +2,7 @@
 // how it runs, a firmware picker) and the platform's seat plate below. The emulator runs only on the table's own board
 // for the player sitting at it (E-002); a remote board (a watcher) shows the bar and a note instead.
 import { esc, html, seatPlates, useStyles } from "/shared/board-kit.js";
-import { DEVICES, deviceName, loadCatalog as fetchCatalog, loadedCatalog, orderedIds } from "/games/fm1-synth/assets/catalog.js";
+import { DEVICES, cleanLists, deviceName, loadCatalog as fetchCatalog, loadedCatalog, orderedIds } from "/games/fm1-synth/assets/catalog.js";
 
 const ID = "fm1-synth";
 const CLOCKS = [60, 80, 100, 120, 160, 200, 240];
@@ -256,18 +256,21 @@ export function mount(root, ctx) {
     }
     const here = device === view?.device;
     // the order is taken when the window opens on a device, so a star does not move the card under the finger
-    if (pickerOrder?.device !== device) pickerOrder = { device, ids: orderedIds(catalog, view?.favorites?.[device]) };
+    if (pickerOrder?.device !== device) pickerOrder = { device, ids: orderedIds(catalog, view?.favorites?.[device], view?.unliked?.[device]) };
     const stars = new Set(view?.favorites?.[device] ?? []);
+    const downs = new Set(view?.unliked?.[device] ?? []);
     const firmwares = pickerOrder.ids.filter((id) => !catalog.gone.has(id)).map((id) => catalog.byId.get(id));
     $(".fs-sheet-title").textContent = `Firmwares for the ${deviceName(device)} (${firmwares.length})`;
     const rows = firmwares
       .map((f) => {
         const on = stars.has(f.id);
         const gone = unavailable.has(`${device}/${f.id}`);
-        return `<div role="button" class="fs-card ${here && view?.firmware === f.id ? "on" : ""} ${gone ? "gone" : ""}" data-id="${esc(f.id)}">
-        <div class="fs-card-head"><b>${esc(f.name)}</b><span class="muted">${esc(f.version ?? "")}</span>
+        const down = downs.has(f.id);
+        return `<div role="button" class="fs-card ${here && view?.firmware === f.id ? "on" : ""} ${gone ? "gone" : ""} ${down ? "unliked" : ""}" data-id="${esc(f.id)}">
+        <div class="fs-card-head"><b>${esc(f.name)}</b>
+          <button type="button" class="fs-unlike ${down ? "on" : ""}" aria-pressed="${down}" aria-label="${down ? "Take the unlike off" : "Unlike it"}">👎</button>
           <button type="button" class="fs-star ${on ? "starred" : ""}" aria-pressed="${on}" aria-label="${on ? "Remove the star" : "Star it"}">${on ? "★" : "☆"}</button></div>
-        <div class="fs-card-by muted">${esc(f.author ?? "")}</div>
+        <div class="fs-card-by muted">${esc([f.author, f.version].filter(Boolean).join(" · "))}</div>
         <div class="fs-card-about">${gone ? "Can't be downloaded right now. Tap to try again." : esc(f.about ?? "")}</div></div>`;
       })
       .join("");
@@ -298,6 +301,31 @@ export function mount(root, ctx) {
     ctx.act(playerSeat(), "device", { device });
   }
 
+  // The stars and unlikes are the table's (E-020): kept in its game data between games, shared by everyone who plays
+  // here. The board that plays brings them to the game once, then keeps the table's copy in step with the game's. On a
+  // table without game data (an older platform) the phone keeps its own, as before (E-013).
+  let tableAsked = false;
+  let tableHas = null; // the table's copy, as JSON
+  async function syncTable() {
+    if (!ctx.store || !plays() || !view || view.done) return;
+    if (!view.shared) {
+      if (tableAsked) return;
+      tableAsked = true;
+      const list = cleanLists(await ctx.store.get("favorites"));
+      const unliked = cleanLists(await ctx.store.get("unliked"));
+      tableHas = JSON.stringify([list, unliked]);
+      const r = await ctx.act(playerSeat(), "favorites", { list, unliked, shared: true });
+      if (!r?.ok) tableAsked = false; // (asked again with the next update)
+      return;
+    }
+    const now = [view.favorites, view.unliked];
+    if (JSON.stringify(now) === tableHas) return;
+    const had = tableHas ? JSON.parse(tableHas) : [null, null];
+    tableHas = JSON.stringify(now);
+    if (JSON.stringify(had[0]) !== JSON.stringify(now[0])) ctx.store.set("favorites", now[0]);
+    if (JSON.stringify(had[1]) !== JSON.stringify(now[1])) ctx.store.set("unliked", now[1]);
+  }
+
   const scroller = dragScroll($(".fs-list"), $(".fs-scroll"), () => (box.classList.contains("fs-north") ? -1 : 1));
   $(".fs-pick").addEventListener("click", openPicker);
   $(".fs-close").addEventListener("click", () => (picker.hidden = true));
@@ -321,11 +349,11 @@ export function mount(root, ctx) {
     const device = shown();
     const catalog = loadedCatalog(device);
     if (!card || !catalog) return;
-    const star = e.target.closest(".fs-star");
+    const star = e.target.closest(".fs-star, .fs-unlike");
     if (star) {
-      // a star on or off; the window stays open
+      // a star or an unlike, on or off; the window stays open
       if (!view || view.done) return;
-      await ctx.act(playerSeat(), "star", { device, id: card.dataset.id, on: star.getAttribute("aria-pressed") !== "true" });
+      await ctx.act(playerSeat(), star.classList.contains("fs-star") ? "star" : "unlike", { device, id: card.dataset.id, on: star.getAttribute("aria-pressed") !== "true" });
       return;
     }
     picker.hidden = true;
@@ -365,6 +393,7 @@ export function mount(root, ctx) {
       // the player's plate turns with the game too, in place on South (E-008)
       seatPlates(root, info).classList.toggle("fs-plates-north", info.rotation === 180);
       const local = plays();
+      syncTable();
       box.classList.toggle("fs-remote", !local);
       // Facing north (the board's turn button): each part turns in place to face that reader, and stays where it is:
       // the bar on the north edge, the panel in the middle, the seat plate and the platform's buttons on the south

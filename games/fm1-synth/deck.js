@@ -1,27 +1,36 @@
 // FM-1 Synth on the player's phone: what plays on the board and how it runs, the firmwares to switch to, and Finish.
-// The synth itself is played on the board (E-003). The player's starred firmwares live in this phone's browser
-// between games: sent to the game once, kept up to date from it (E-013).
+// The synth itself is played on the board (E-003). Stars and unlikes are the table's, kept in its game data and
+// brought to the game by the board (E-020). A list this phone kept before that moves to the table once. On a table
+// without game data (an older platform) this phone keeps them between games, as before (E-013).
 import { esc, useStyles } from "/shared/board-kit.js";
-import { DEVICES, deviceName, loadCatalog, noFavorites, orderedIds } from "/games/fm1-synth/assets/catalog.js";
+import { DEVICES, cleanLists, deviceName, loadCatalog, noFavorites, orderedIds } from "/games/fm1-synth/assets/catalog.js";
 
 const STORE = "fm1-synth.favorites";
+const STORE_UNLIKED = "fm1-synth.unliked";
+const MOVED = "fm1-synth.favorites.moved"; // this phone's list has gone to the table
 
-/** Each device's list of ids, from whatever was stored. */
-const clean = (v) => Object.fromEntries(DEVICES.map(({ id: d }) => [d, Array.isArray(v?.[d]) ? v[d].filter((x) => typeof x === "string") : []]));
-
-function stored() {
+function stored(key = STORE) {
   try {
-    return clean(JSON.parse(localStorage.getItem(STORE) ?? "null"));
+    return cleanLists(JSON.parse(localStorage.getItem(key) ?? "null"));
   } catch {
     return noFavorites();
   }
 }
 
-function store(favorites) {
+function store(lists, key = STORE) {
   try {
-    localStorage.setItem(STORE, JSON.stringify(clean(favorites)));
+    localStorage.setItem(key, JSON.stringify(cleanLists(lists)));
   } catch {
     // (private browsing, or storage blocked: the stars last for this game only)
+  }
+}
+
+function moved(set) {
+  try {
+    if (set) localStorage.setItem(MOVED, "1");
+    return localStorage.getItem(MOVED) === "1";
+  } catch {
+    return true; // (no storage: nothing to move)
   }
 }
 
@@ -31,7 +40,7 @@ export function mount(root, ctx) {
     <div class="card fd-now"><div class="eyebrow fd-dev"></div><div class="fd-name"></div>
       <div class="fd-status"><span class="fd-dot"></span><span class="fd-text"></span></div></div>
     <div class="fd-devices">${DEVICES.map((d) => `<button type="button" class="fd-dev-btn" data-device="${d.id}">${d.name}</button>`).join("")}</div>
-    <div class="fd-hint muted">Play the synth on the board. Pick another firmware here or on the board. Starred ones come first.</div>
+    <div class="fd-hint muted">Play the synth on the board. Pick another firmware here or on the board. Starred ones come first, unliked ones last.</div>
     <div class="fd-list"></div>
     <button type="button" class="fd-finish">Finish</button>
     <div class="fd-confirm" hidden><div class="fd-confirm-text">End the session? It can't be continued; the board offers Play again.</div>
@@ -76,26 +85,31 @@ export function mount(root, ctx) {
     if (failed) return note(`The ${deviceName(view.device)}'s firmware list could not be loaded. Trying again…`);
     if (catalog?.device !== view.device) return note("Loading the firmware list…");
     const stars = view.favorites?.[catalog.device] ?? [];
-    // starred first, newest star first; a star given here moves the row only the next time
-    if (order?.synced !== view.favSynced || order.catalog !== catalog) order = { synced: view.favSynced, catalog, ids: orderedIds(catalog, stars) };
+    const downs = view.unliked?.[catalog.device] ?? [];
+    // starred first, newest star first, unliked last; a star or unlike given here moves the row only the next time
+    const synced = `${view.favSynced}/${view.shared}`;
+    if (order?.synced !== synced || order.catalog !== catalog) order = { synced, catalog, ids: orderedIds(catalog, stars, downs) };
     const html = order.ids
       .filter((id) => !catalog.gone.has(id))
       .map((id) => catalog.byId.get(id))
       .map((f) => {
         const on = stars.includes(f.id);
-        return `<div class="fd-row"><button type="button" class="fd-fw ${f.id === view.firmware ? "on" : ""}" data-id="${esc(f.id)}" data-name="${esc(f.name)}"
+        const down = downs.includes(f.id);
+        return `<div class="fd-row ${down ? "unliked" : ""}"><button type="button" class="fd-fw ${f.id === view.firmware ? "on" : ""}" data-id="${esc(f.id)}" data-name="${esc(f.name)}"
         ${view.done ? "disabled" : ""}><b>${esc(f.name)}</b><span>${esc(f.author ?? "")}</span></button>
         <button type="button" class="fd-star ${on ? "starred" : ""}" data-id="${esc(f.id)}" aria-pressed="${on}" aria-label="${on ? "Remove the star" : "Star it"}"
-        ${view.done ? "disabled" : ""}>${on ? "★" : "☆"}</button></div>`;
+        ${view.done ? "disabled" : ""}>${on ? "★" : "☆"}</button>
+        <button type="button" class="fd-unlike ${down ? "on" : ""}" data-id="${esc(f.id)}" aria-pressed="${down}" aria-label="${down ? "Take the unlike off" : "Unlike it"}"
+        ${view.done ? "disabled" : ""}>👎</button></div>`;
       })
       .join("");
     if (html !== rows) $(".fd-list").innerHTML = rows = html;
   }
 
   $(".fd-list").addEventListener("click", (e) => {
-    const star = e.target.closest(".fd-star");
+    const star = e.target.closest(".fd-star, .fd-unlike");
     if (star) {
-      if (view && !view.done) ctx.send("star", { device: catalog.device, id: star.dataset.id, on: star.getAttribute("aria-pressed") !== "true" });
+      if (view && !view.done) ctx.send(star.classList.contains("fd-star") ? "star" : "unlike", { device: catalog.device, id: star.dataset.id, on: star.getAttribute("aria-pressed") !== "true" });
       return;
     }
     const b = e.target.closest(".fd-fw");
@@ -123,15 +137,26 @@ export function mount(root, ctx) {
   return {
     update(v) {
       view = v;
-      if (!v.favSynced) {
+      if (ctx.store) {
+        // The table keeps the lists and the board has brought them (E-020): what this phone kept before joins them,
+        // once, and from then on the phone keeps nothing.
+        if (v.shared && !sent && !v.done && !moved()) {
+          sent = true;
+          const list = stored();
+          const unliked = stored(STORE_UNLIKED);
+          if (!DEVICES.some((d) => list[d.id].length || unliked[d.id].length)) moved(true);
+          else ctx.send("favorites", { list, unliked, merge: true }).then((r) => (r?.ok ? moved(true) : (sent = false)));
+        }
+      } else if (!v.favSynced) {
         // the game has no stars of this player yet (a new game, or another player took the seat): send this phone's
         if (!sent && !v.done) {
           sent = true;
-          ctx.send("favorites", { list: stored() });
+          ctx.send("favorites", { list: stored(), unliked: stored(STORE_UNLIKED) });
         }
       } else if (v.favorites) {
         sent = false; // (sent again if the seat changes hands)
         store(v.favorites);
+        store(v.unliked ?? noFavorites(), STORE_UNLIKED);
       }
       $(".fd-dev").textContent = `M-VAVE ${deviceName(v.device)}`;
       $(".fd-name").textContent = v.firmwareName || "Choosing a firmware…";

@@ -26,6 +26,11 @@
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .fd-star:hover { border-color: var(--felt-line, rgba(255, 255, 255, 0.12)); }
 .fd-star.starred { color: var(--brass, #c8962f); }
+/* an unlike, beside the star: pale until it is on; an unliked firmware's row is greyed and comes last (E-020) */
+.fd-unlike { flex: none; width: 52px; padding: 0; border-radius: 12px; font-size: 1.3em; line-height: 1; background: transparent;
+  border: 1px solid var(--felt-line, rgba(255, 255, 255, 0.12)); filter: grayscale(1); opacity: 0.4; }
+.fd-unlike.on { filter: none; opacity: 1; }
+.fd-row.unliked .fd-fw, .fd-row.unliked .fd-star { opacity: 0.4; }
 .fd-confirm { display: flex; flex-direction: column; gap: 8px; }
 .fd-confirm-text { font-size: 0.9em; color: var(--ink-soft); }
 .fd-confirm-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
