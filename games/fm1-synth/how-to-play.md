@@ -9,7 +9,7 @@ community's firmwares on it.
 - **Device to start with** picks the FM-1 or the SMK-37; switch any time during the game.
 - **Firmware…** on the board, or your phone's list, switches firmware. Each is downloaded from its author's site, so
   the table needs the internet.
-- **☆** stars a firmware: starred ones come first, and your phone keeps them.
+- **☆** stars a firmware: starred ones come first. **👎** unlikes one: it goes to the end, greyed. The table keeps both.
 - **Finish** on your phone ends the session (it asks first).
 
 ## Playing
@@ -31,8 +31,14 @@ device on its first firmware; pick another from its list. Your phone has the sam
 
 Tap the **☆** on a firmware, in the board's **Firmware…** window or in your phone's list, to star it; tap the **★**
 again to take the star away. The next time the list opens, starred firmwares come first, the newest star at the top.
-The stars are kept in your phone's browser, so they come back with you for the next game at this table. Another
-player who takes your seat brings their own.
+
+Tap the **👎** beside the star to unlike a firmware you would rather not see: it turns grey and, the next time the
+list opens, sits at the end. It can still be played. Tap the 👎 again to take the unlike off, and the firmware is back
+in its usual place. A firmware has a star or an unlike, not both: giving one takes the other off.
+
+Stars and unlikes are kept by the table, so they are there for the next game, whoever plays and with whichever
+phone. (Stars an earlier version kept in your phone's browser move to the table the first time you play.) On a table
+with an older Game Table they stay in your phone's browser, as before.
 
 ## Settings on the board
 

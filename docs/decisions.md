@@ -148,3 +148,24 @@ Records are history: an older record is not edited when a newer one changes it. 
   runs on. The FM-1 / SMK-37 tabs are two buttons, each framed in the platform's green, the chosen one brass (the
   green frame around both, from E-011, looked odd). *Why:* Klaus, on the table's touchscreen: the list scrolled
   sideways, and its scrollbar was too thin to use.
+- **E-020 · 2026-11-17 · Klaus** — **Unlike, and the stars move from the phone to the table.** "Users should be able to
+  favorite firmwares that are then shown on top, followed by all others, newest favorites first. I also want to add an
+  unlike; these should be shown at the bottom of the list, possibly even greyed out until the unlike is going away."
+  And, for where such things are kept: "per game PC … not per authentication code" (games-service D-302).
+  - **Unlike:** a 👎 beside the ☆, on the board's firmware window and on the phone. An unliked firmware is greyed and,
+    the next time the list opens, at the end (newest unlike last); it can still be played; the 👎 again takes it off.
+    A firmware has a star or an unlike, not both: giving one takes the other off. Starred ones stay first, newest star
+    first (E-013), then the catalog's order, then the unliked. As with a star, the order is taken when a list opens,
+    so nothing moves under the finger. Rules: intent `unlike { device, id, on }`, state `unliked`.
+  - **Kept by the table:** the game's manifest says `storage: true`; the lists are the table's game data (`favorites`
+    and `unliked`, each `{ fm1: [...], smk37: [...] }`), shared by everyone who plays there. The board that plays
+    brings them to the game once (`favorites { list, unliked, shared: true }`) and writes the game's lists back to the
+    table whenever they change; the rules never read the store. They stay when the seat changes hands (E-013 reset
+    them: they were one player's). This replaces E-013's "the stars live in the player's phone browser".
+  - **The move:** a phone that kept stars sends them once after the table's lists have come (`merge: true`); they
+    are added behind the table's, and the phone notes that it has moved them (`fm1-synth.favorites.moved`). Its old
+    copy is left in place, unused.
+  - **An older table** (no `ctx.store`): as before, the phone keeps the lists (now the unlikes too) and they are one
+    player's.
+  *Checks:* `tests/fm1-synth.test.ts` (unlike, the table's lists, the merge, a seat change), `tests/ui.test.ts` (the
+  board with a store, a watching board, the phone's move, unlike on both).

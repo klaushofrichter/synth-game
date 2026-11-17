@@ -7,6 +7,8 @@ export const DEVICES = [{ id: "fm1", name: "FM-1" }, { id: "smk37", name: "SMK-3
 export const deviceName = (d) => DEVICES.find((x) => x.id === d)?.name ?? String(d);
 /** No stars for any device. */
 export const noFavorites = () => Object.fromEntries(DEVICES.map((d) => [d.id, []]));
+/** Each device's list of ids, from whatever was kept (the table's game data, a phone's browser). */
+export const cleanLists = (v) => Object.fromEntries(DEVICES.map(({ id: d }) => [d, Array.isArray(v?.[d]) ? v[d].filter((x) => typeof x === "string") : []]));
 
 const catalogs = new Map(); // device -> Promise<{ device, default, firmwares, byId, gone, checked, check }>
 const loaded = new Map(); // device -> the catalog, once it is here
@@ -61,10 +63,12 @@ function startChecks(cat) {
 /** A device's catalog if it has been loaded, else undefined (for a tap, which cannot wait). */
 export const loadedCatalog = (device) => loaded.get(device);
 
-/** The catalog's firmware ids, starred ones first, newest star first, then the catalog's order (E-013); without those
- * that are gone (E-016). */
-export function orderedIds(catalog, stars = []) {
+/** The catalog's firmware ids: starred ones first, newest star first, then the catalog's order (E-013), then the
+ * unliked ones, newest last (E-020); without those that are gone (E-016). */
+export function orderedIds(catalog, stars = [], unliked = []) {
   const first = stars.filter((id) => catalog.byId.has(id));
   const starred = new Set(first);
-  return [...first, ...catalog.firmwares.map((f) => f.id).filter((id) => !starred.has(id))].filter((id) => !catalog.gone.has(id));
+  const last = unliked.filter((id) => catalog.byId.has(id) && !starred.has(id));
+  const down = new Set(last);
+  return [...first, ...catalog.firmwares.map((f) => f.id).filter((id) => !starred.has(id) && !down.has(id)), ...last].filter((id) => !catalog.gone.has(id));
 }
