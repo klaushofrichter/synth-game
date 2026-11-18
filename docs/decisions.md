@@ -182,3 +182,6 @@ Records are history: an older record is not edited when a newer one changes it. 
   - **A write the table refused was never tried again,** and went unnoticed: the board noted a list as saved before
     it was. It now notes it once the table has it and tries again, also when nothing else changes.
   *Check:* `tests/ui.test.ts` ("never takes a table it could not ask for one without stars…").
+- **E-023 · 2026-11-18 · Klaus** — The firmware window's scroll bar is 28 px wide, not 44 (E-019): the width of the
+  platform's bar in the settings windows (games-service D-306), which was made after this one and at two thirds of
+  its width. *Why:* Klaus: twice the browser's bar is enough for a finger, and one width for both reads as one table.
