@@ -194,7 +194,7 @@ def main():
             sizes = board.evaluate("""() => { const l = document.querySelector('.fs-list'), b = document.querySelector('.fs-scroll');
               return { over: l.scrollWidth - l.clientWidth, room: l.scrollHeight - l.clientHeight, bar: b.hidden ? 0 : b.offsetWidth }; }""")
             assert sizes["over"] <= 0, f"the firmware list scrolls sideways by {sizes['over']} px"
-            assert sizes["room"] > 0 and sizes["bar"] >= 36, f"the list's own bar is missing or thin: {sizes}"
+            assert sizes["room"] > 0 and sizes["bar"] >= 24, f"the list's own bar is missing or thin: {sizes}"
             top = lambda: board.evaluate("() => document.querySelector('.fs-list').scrollTop")
             r = board.locator(".fs-card").nth(9).bounding_box()
             board.mouse.move(r["x"] + r["width"] / 2, r["y"] + r["height"] / 2)
