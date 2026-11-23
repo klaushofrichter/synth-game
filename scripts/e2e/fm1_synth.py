@@ -203,6 +203,16 @@ def main():
             board.mouse.up()
             assert top() > 200, f"a drag scrolled the list by {top()} px only"
             assert not board.locator(".fs-picker").is_hidden() and playing(board) == fm1_first, "a drag chose a firmware"
+            # The drag above leaves a fling running, which on a long list may carry the list to its end, where the thumb
+            # cannot move it further: let the fling die down, then start the thumb from the top of the list.
+            last = [-1]
+            def settled():
+                now, was = top(), last[0]
+                last[0] = now
+                return now == was
+            wait(settled, 15, "the fling to settle")
+            board.evaluate("() => { document.querySelector('.fs-list').scrollTop = 0; }")
+            wait(lambda: top() == 0, 5, "the list to return to the top")
             t = board.locator(".fs-thumb").bounding_box()
             before = top()
             board.mouse.move(t["x"] + t["width"] / 2, t["y"] + 10)
