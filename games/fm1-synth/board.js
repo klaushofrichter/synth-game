@@ -135,12 +135,15 @@ export function mount(root, ctx) {
 
   /**
    * The board's own choice of a firmware for the device: its first, or the next in the list when one's package is gone
-   * (its site says so, E-016) or could not be downloaded here (E-015).
+   * (its site says so, E-016) or could not be downloaded here (E-015). After a failed download only one whose site
+   * answered moves up: on a table without internet every answer is "unknown", and trying them all is no use.
    */
   async function chooseFor(c) {
     const choice = view.choice;
     for (const f of [c.byId.get(c.default), ...c.firmwares]) {
-      if (!f || unavailable.has(`${c.device}/${f.id}`) || (await c.check(f.id)) === "gone") continue;
+      if (!f || unavailable.has(`${c.device}/${f.id}`)) continue;
+      const answer = await c.check(f.id);
+      if (answer === "gone" || (skipped.length && answer !== "ok")) continue;
       if (dead || view.choice !== choice) return; // (chosen otherwise meanwhile)
       autoChoice = choice + 1;
       return ctx.act(playerSeat(), "firmware", { id: f.id, name: f.name, device: c.device });
@@ -309,9 +312,9 @@ export function mount(root, ctx) {
   let tableWriting = false;
   let tableRetry = null;
   async function syncTable() {
-    if (dead || !ctx.store || !plays() || !view || view.done) return;
+    if (dead || !ctx.store || !plays() || !view) return;
     if (!view.shared) {
-      if (tableAsked) return;
+      if (tableAsked || view.done) return; // (a finished game still writes the table its last stars, below)
       tableAsked = true;
       try {
         // A table that can't be asked just now throws (games-service D-304): asked again with the next update, never
@@ -433,6 +436,9 @@ export function mount(root, ctx) {
         const me = info.players.find((p) => p.seat === v.seat);
         away.innerHTML = `<div class="fs-away-box"><div class="fs-away-title">The synth plays on the table's own screen</div>
           <div class="muted">${esc(me?.name ?? "The player")} plays the ${dev} there${v.firmwareName ? `: ${esc(v.firmwareName)}` : ""}. Its sound stays at the table.</div></div>`;
+        // no longer this board's to play: its synth keeps its flash and goes quiet, and boots again if it comes back
+        if (booted !== -1) synth?.flush(true);
+        booted = -1;
         return;
       }
       applyPrefs();
@@ -503,7 +509,7 @@ function dragScroll(list, bar, turned) {
   // dragging the list itself
   let drag = null, dragged = false;
   list.addEventListener("pointerdown", (e) => {
-    if (e.button > 0 || drag) return;
+    if (e.button > 0) return; // (a new press starts afresh, also when the last one was let go outside the list)
     stop();
     dragged = false;
     drag = { id: e.pointerId, y: e.clientY, top: list.scrollTop, k: factor(list), last: e.clientY, t: e.timeStamp, v: 0 };

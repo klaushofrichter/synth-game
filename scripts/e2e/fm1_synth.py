@@ -71,6 +71,10 @@ def playing(board):
     return board.locator(".fs-name").inner_text().split(" · ", 1)[-1]
 
 
+# The panel's pixels in a small square around a share of its width and height.
+KEY_AREA = """([fx, fy]) => { const c = document.querySelector('.fs-panel');
+  return Array.from(c.getContext('2d').getImageData(Math.round(fx * c.width) - 12, Math.round(fy * c.height) - 12, 24, 24).data).join(); }"""
+
 # No finite animation or transition still running (spinners and other endless ones aside).
 SETTLED = "() => !document.getAnimations().some((x) => x.playState === 'running' && x.effect?.getTiming().iterations !== Infinity)"
 
@@ -142,10 +146,11 @@ def main():
             shot(deck, "phone")
 
             # A touch on a white key: the panel shows it held, and lets go.
-            before = board.evaluate("() => document.querySelector('.fs-panel').toDataURL()")
+            # (only around the key: the LCD and the LEDs redraw by themselves)
+            key = lambda: board.evaluate(KEY_AREA, [0.30, 0.91])
+            before = key()
             touch(board, 0.30, 0.91, 11, "pointerdown")
-            wait(lambda: board.evaluate("() => document.querySelector('.fs-panel').toDataURL()") != before, 5,
-                 "a touch on a key to change the panel")
+            wait(lambda: key() != before, 5, "a touch on a key to show on the panel")
             touch(board, 0.30, 0.91, 11, "pointerup")
 
             # Favorites: a star in the window keeps the order while it is open and puts the firmware first the next

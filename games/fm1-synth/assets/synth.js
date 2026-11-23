@@ -124,8 +124,12 @@ export class Synth {
     this.onStatus("loading", `Loading ${entry.name}…`);
     try {
       await this.audio();
-      const got = this.packages.get(entry.id) ?? (await this.kept(entry)) ?? (await this.download(entry));
-      this.packages.set(entry.id, got);
+      // Per device and per catalog package: some ids are in both catalogs with different packages, and a catalog
+      // that moves to a new package must not keep booting the old one this browser kept.
+      const device = this.board === 1 ? "smk37" : "fm1";
+      const key = `game.${device}.${entry.id}@${entry.package ?? entry.installer}`;
+      const got = this.packages.get(key) ?? (await this.kept(key)) ?? (await this.download(entry));
+      this.packages.set(key, got);
       if (seq !== this.seq || this.dead) return;
       const hash = await packageHash(got.bytes);
       let record = null;
@@ -134,8 +138,8 @@ export class Synth {
       } catch {}
       await this.flush(true);
       if (seq !== this.seq || this.dead) return;
-      const session = { seq, hash, entry: `game.${entry.id}`, revision: record?.revision ?? 0, sectors: record?.sectors ?? [],
-        record: { version: 1, hash, name: entry.name, byo: false, device: this.board === 1 ? "smk37" : "fm1", package: got.bytes, url: got.url } };
+      const session = { seq, hash, entry: key, revision: record?.revision ?? 0, sectors: record?.sectors ?? [],
+        record: { version: 1, hash, name: entry.name, byo: false, device, package: got.bytes, url: got.url } };
       this.pending = session;
       this.down.fill(0);
       this.holds.fill(0);
@@ -174,9 +178,9 @@ export class Synth {
   }
 
   /** The package this browser kept for a firmware (a site that is down then costs nothing). */
-  async kept(entry) {
+  async kept(key) {
     try {
-      const k = await this.saves.entry(`game.${entry.id}`);
+      const k = await this.saves.entry(key);
       return k ? { bytes: k.package, url: k.url } : null;
     } catch {
       return null;

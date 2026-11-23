@@ -212,6 +212,11 @@ describe("the board", () => {
     expect(t.state().firmware).toBe("alpha");
     t.inst.openPicker();
     await until(() => t.$$(".fs-card").length === 3);
+    // its download fails too: the board does not walk the whole list (no site said any is there), it says so once
+    synth().status("error", "Alpha can't be downloaded from its author's site right now", { unavailable: true });
+    await until(() => t.state().status.text.startsWith("No firmware for the FM-1"));
+    expect(t.state()).toMatchObject({ firmware: "alpha", choice: 1 });
+    expect(synth().plays).toHaveLength(1);
   });
 
   it("leaves out a firmware whose site gives no answer while the others do", async () => {

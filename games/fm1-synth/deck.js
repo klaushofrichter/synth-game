@@ -152,7 +152,8 @@ export function mount(root, ctx) {
         // the game has no stars of this player yet (a new game, or another player took the seat): send this phone's
         if (!sent && !v.done) {
           sent = true;
-          ctx.send("favorites", { list: stored(), unliked: stored(STORE_UNLIKED) });
+          // (not taken: sent again with the next update)
+          ctx.send("favorites", { list: stored(), unliked: stored(STORE_UNLIKED) }).then((r) => r?.ok || (sent = false), () => (sent = false));
         }
       } else if (v.favorites) {
         sent = false; // (sent again if the seat changes hands)
