@@ -8,6 +8,10 @@
 <!-- No release badge: this repo cuts no releases; tables run whatever the production branch holds, and the game's
      version is in its manifest. No version numbers in this text either: they go stale. -->
 
+**New to Game Table?** The website shows what it is: [games.skylar.technology](https://games.skylar.technology).
+Questions and answers about getting started, building and changing games, and playing them:
+[games.skylar.technology/faq](https://games.skylar.technology/faq).
+
 A pocket synthesizer as a game for [Game Table](https://github.com/klaushofrichter/games-service): the **M-VAVE FM-1**
 (or its 37-key sibling, the **SMK-37**), emulated in the table's board, with any of the community's firmwares on it.
 One player sits at the table and plays the synth on the board by touch; their phone picks firmwares and ends the
