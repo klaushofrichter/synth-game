@@ -71,6 +71,10 @@ def playing(board):
     return board.locator(".fs-name").inner_text().split(" · ", 1)[-1]
 
 
+# No finite animation or transition still running (spinners and other endless ones aside).
+SETTLED = "() => !document.getAnimations().some((x) => x.playState === 'running' && x.effect?.getTiming().iterations !== Infinity)"
+
+
 def wait_running(board, deck, name=None):
     """The board says `name` (or any firmware) runs, and so does the phone, and names it; a download or boot error
     fails at once with its words."""
@@ -114,9 +118,9 @@ def main():
             note_404(deck, "Klaus")
             pick_game(board, "fm1-synth")
             board.locator(".dialog [data-x=yes]").click()  # Device to start with: FM-1, the default
-            time.sleep(0.4)
+            board.locator(".dialog").wait_for(state="hidden")
             deck.click("#ready")
-            time.sleep(0.4)
+            wait(lambda: all(pl["ready"] for pl in a("GET", "/state")["players"]), 10, "everyone ready")
             a("POST", "/game/start")
             st = a("GET", "/state")
             seat = next(x for x in st["players"] if x["name"] == "Klaus")["seat"]
@@ -140,10 +144,9 @@ def main():
             # A touch on a white key: the panel shows it held, and lets go.
             before = board.evaluate("() => document.querySelector('.fs-panel').toDataURL()")
             touch(board, 0.30, 0.91, 11, "pointerdown")
-            time.sleep(0.3)
-            held = board.evaluate("() => document.querySelector('.fs-panel').toDataURL()")
+            wait(lambda: board.evaluate("() => document.querySelector('.fs-panel').toDataURL()") != before, 5,
+                 "a touch on a key to change the panel")
             touch(board, 0.30, 0.91, 11, "pointerup")
-            assert held != before, "a touch on a key changed nothing on the panel"
 
             # Favorites: a star in the window keeps the order while it is open and puts the firmware first the next
             # time; an unlike greys a firmware and puts it last (E-020). The table keeps both in its game data; on a
@@ -281,7 +284,7 @@ def main():
             places = {s: board.evaluate(BOX, s) for s in (".fs-bar", ".fs-frame", ".kit-plate")}
             a("POST", "/rotate", {"degrees": 180})
             wait(lambda: board.locator(".fs-north").count(), 10, "the board to face north")
-            time.sleep(0.4)
+            wait(lambda: board.evaluate(SETTLED), 5, "the turn to settle")
             for s, box in places.items():
                 now = board.evaluate(BOX, s)
                 assert now == box, f"{s} moved when facing north: {box} -> {now}"
