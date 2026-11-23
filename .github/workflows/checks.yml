@@ -86,6 +86,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true # fm1-sid/ (joakimeriksson/fm1-sid): its sidplayer.fwsc is the package fm1-soc's tests unpack and boot
       - uses: actions/setup-node@v7
         with:
           node-version: 26

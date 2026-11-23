@@ -28,7 +28,9 @@ by Joakim Eriksson: `crates/`, `web/`, `tools/`, `docs/`, … with its README as
 - Merging upstream: `git fetch upstream && git merge upstream/master` on a branch. Upstream's `README.md` is
   `FM1-EMU.md` here: take upstream's README changes into `FM1-EMU.md` and keep this repository's `README.md`
   (`git show upstream/master:README.md > FM1-EMU.md`, then `git checkout --ours README.md`). Upstream's workflows are
-  not carried (`.github/workflows/` holds only `checks.yml`): delete any that a merge brings back. Then rebuild the
+  not carried (`.github/workflows/` holds only `checks.yml`): delete any that a merge brings back. Upstream has a submodule,
+  `fm1-sid/` (its `sidplayer.fwsc` is what `fm1-soc`'s tests unpack and boot; CI fails without it): run
+  `git submodule update --init` after the merge; `checks.yml`'s `emulator` job checks it out. Then rebuild the
   game's emulator, run the tests and the browser check, and give the game a new version. Merge that pull request with a
   **merge commit**, never squash: a squash drops upstream's history, and the next merge conflicts on everything again.
 - `tools/readme_firmwares.mjs` writes upstream's README table into `README.md`; here that table lives in `FM1-EMU.md`,
