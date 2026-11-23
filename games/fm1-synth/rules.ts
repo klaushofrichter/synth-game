@@ -42,12 +42,12 @@ export interface State {
 }
 
 const ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
-const DEVICES: Device[] = ["fm1", "smk37"];
 const DEVICE_NAME: Record<Device, string> = { fm1: "FM-1", smk37: "SMK-37" };
+const DEVICES = Object.keys(DEVICE_NAME) as Device[];
 const STATES: RunState[] = ["idle", "loading", "running", "error"];
 /** At most this many stars per device (more than either catalog lists). */
 const MAX_FAVORITES = 200;
-const noFavorites = (): Record<Device, string[]> => ({ fm1: [], smk37: [] });
+const noFavorites = () => Object.fromEntries(DEVICES.map((d) => [d, []])) as unknown as Record<Device, string[]>;
 const text = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max) : "");
 
 function choose(state: State, device: Device, id: string, name: string, ctx: GameContext): State {
@@ -101,13 +101,10 @@ function describeStep(step: StepInfo<State>): StepDescription | null {
   if (name === "firmware") return { text: step.accepted ? `picks ${step.after.firmwareName}` : "tries to pick a firmware" };
   if (name === "device") return step.accepted ? { text: `switches to the ${DEVICE_NAME[step.after.device]}` } : null;
   if (name === "status") return step.accepted ? { text: `board: ${step.after.status.text || step.after.status.state}` } : null;
-  if (name === "star" && step.accepted) {
+  if ((name === "star" || name === "unlike") && step.accepted) {
     const p = step.intent.payload as { id?: string; on?: boolean };
-    return { text: `${p.on ? "stars" : "unstars"} ${p.id}` };
-  }
-  if (name === "unlike" && step.accepted) {
-    const p = step.intent.payload as { id?: string; on?: boolean };
-    return { text: `${p.on ? "unlikes" : "takes the unlike off"} ${p.id}` };
+    const [on, off] = name === "star" ? ["stars", "unstars"] : ["unlikes", "takes the unlike off"];
+    return { text: `${p.on ? on : off} ${p.id}` };
   }
   if (name === "finish") return { text: "is done playing" };
   return null;

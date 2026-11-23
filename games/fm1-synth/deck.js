@@ -95,12 +95,13 @@ export function mount(root, ctx) {
       .map((f) => {
         const on = stars.includes(f.id);
         const down = downs.includes(f.id);
+        const dis = view.done ? "disabled" : "";
         return `<div class="fd-row ${down ? "unliked" : ""}"><button type="button" class="fd-fw ${f.id === view.firmware ? "on" : ""}" data-id="${esc(f.id)}" data-name="${esc(f.name)}"
-        ${view.done ? "disabled" : ""}><b>${esc(f.name)}</b><span>${esc(f.author ?? "")}</span></button>
+        ${dis}><b>${esc(f.name)}</b><span>${esc(f.author ?? "")}</span></button>
         <button type="button" class="fd-star ${on ? "starred" : ""}" data-id="${esc(f.id)}" aria-pressed="${on}" aria-label="${on ? "Remove the star" : "Star it"}"
-        ${view.done ? "disabled" : ""}>${on ? "★" : "☆"}</button>
+        ${dis}>${on ? "★" : "☆"}</button>
         <button type="button" class="fd-unlike ${down ? "on" : ""}" data-id="${esc(f.id)}" aria-pressed="${down}" aria-label="${down ? "Take the unlike off" : "Unlike it"}"
-        ${view.done ? "disabled" : ""}>👎</button></div>`;
+        ${dis}>👎</button></div>`;
       })
       .join("");
     if (html !== rows) $(".fd-list").innerHTML = rows = html;
@@ -151,7 +152,8 @@ export function mount(root, ctx) {
         // the game has no stars of this player yet (a new game, or another player took the seat): send this phone's
         if (!sent && !v.done) {
           sent = true;
-          ctx.send("favorites", { list: stored(), unliked: stored(STORE_UNLIKED) });
+          // (not taken: sent again with the next update)
+          ctx.send("favorites", { list: stored(), unliked: stored(STORE_UNLIKED) }).then((r) => r?.ok || (sent = false), () => (sent = false));
         }
       } else if (v.favorites) {
         sent = false; // (sent again if the seat changes hands)

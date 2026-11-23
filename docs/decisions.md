@@ -185,3 +185,16 @@ Records are history: an older record is not edited when a newer one changes it. 
 - **E-023 · 2026-11-18 · Klaus** — The firmware window's scroll bar is 28 px wide, not 44 (E-019): the width of the
   platform's bar in the settings windows (games-service D-306), which was made after this one and at two thirds of
   its width. *Why:* Klaus: twice the browser's bar is enough for a finger, and one width for both reads as one table.
+- **E-024 · 2026-11-23 · Klaus** — Fixes from a code review of the whole repository.
+  - **Kept packages are per device and per catalog package.** Twelve ids (amb, dub, zen, …) are in both catalogs
+    with different packages, and the board kept a package under its id alone, so the SMK-37 could boot the FM-1's.
+    A catalog that moved a firmware to a new package also kept booting the old one this browser had kept. The key is
+    now `game.<device>.<id>@<package>`; the flash a firmware saved stays, since it is kept per package hash.
+  - **After a failed download the board only moves on to a firmware whose site answered** (E-015). On a table
+    without internet every answer is "unknown", and the board walked the whole list, each one a move and an entry in
+    what was played. It now says once that nothing can be downloaded.
+  - **A board that stops playing** (the seat plays elsewhere) keeps the synth's flash and pauses it; it boots again
+    when the seat comes back.
+  - **A finished game still writes the table its last stars** (E-020); a phone's first `favorites` that was not
+    taken is sent again; a press let go outside the firmware list no longer blocks the next one.
+  *Check:* `tests/ui.test.ts` ("keeps listing every firmware when no site answers at all").

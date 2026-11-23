@@ -29,5 +29,11 @@ else
   git -C "$DIR" checkout --quiet --detach FETCH_HEAD
   echo "games-service $REF at $(git -C "$DIR" rev-parse --short HEAD)"
 fi
-# Its own dependencies (zod, ws, jszip, …) for the host code the tests import.
-[ -d "$DIR/node_modules" ] && [ "${FORCE_NPM_CI:-0}" != 1 ] || (cd "$DIR" && npm ci --no-audit --no-fund --loglevel=error)
+# Its own dependencies (zod, ws, jszip, …) for the host code the tests import: installed again whenever the checkout's
+# package-lock.json is not the one they were installed from (another ref). A local checkout's are its own business.
+LOCK=$(git -C "$DIR" rev-parse HEAD:package-lock.json 2>/dev/null || echo none)
+if [ "${FORCE_NPM_CI:-0}" = 1 ] || { [ ! -L "$DIR" ] && [ "$(cat "$DIR/node_modules/.installed-from" 2>/dev/null)" != "$LOCK" ]; } \
+  || [ ! -d "$DIR/node_modules" ]; then
+  (cd "$DIR" && npm ci --no-audit --no-fund --loglevel=error)
+  echo "$LOCK" > "$DIR/node_modules/.installed-from"
+fi
