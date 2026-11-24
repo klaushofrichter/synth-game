@@ -12,14 +12,16 @@ const prefsOf = (info) => ({
   mhz: CLOCKS.includes(info?.prefs?.mhz) ? info.prefs.mhz : 100,
 });
 
-/** The mounted board, for the settings window's buttons. */
-let live = null;
 /** The emulator's version (upstream fm1-emu's, from emu/build.json), once the board has read it. */
 let emuVersion = null;
 
-export function settings({ info, setPrefs }) {
+/**
+ * The settings window's items. The running board adds what acts on it (the device, the firmware, Restart): the
+ * platform asks it (games-service D-326); before the game is on the table, the module's export gives the rest.
+ */
+export function settings({ info, setPrefs }, board = null) {
   const p = prefsOf(info);
-  const device = live?.device();
+  const device = board?.device();
   return [
     // the device on the board now; the game setting "Device to start with" is locked once the game runs (E-006)
     ...(device
@@ -29,7 +31,7 @@ export function settings({ info, setPrefs }) {
           hint: "Switch the board to the other device; it starts on that device's first firmware.",
           value: device,
           options: DEVICES.map((d) => ({ value: d.id, label: d.name })),
-          onChange: (v) => live?.setDevice(v),
+          onChange: (v) => board.setDevice(v),
         }]
       : []),
     {
@@ -47,8 +49,12 @@ export function settings({ info, setPrefs }) {
       options: CLOCKS.map((c) => ({ value: String(c), label: `${c} MHz` })),
       onChange: (v) => setPrefs({ mhz: Number(v) }),
     },
-    { type: "button", label: "Firmware", action: "Choose a firmware…", onChange: () => live?.openPicker() },
-    { type: "button", label: "Restart", action: "Restart the firmware", onChange: () => live?.restart() },
+    ...(board
+      ? [
+          { type: "button", label: "Firmware", action: "Choose a firmware…", onChange: () => board.openPicker() },
+          { type: "button", label: "Restart", action: "Restart the firmware", onChange: () => board.restart() },
+        ]
+      : []),
     ...(emuVersion ? [{ type: "text", label: "Emulator", value: `fm1-emu ${emuVersion}` }] : []),
   ];
 }
@@ -468,12 +474,11 @@ export function mount(root, ctx) {
       dead = true;
       clearTimeout(tableRetry);
       ro.disconnect();
-      if (live === inst) live = null;
       synth?.destroy();
       box.remove();
     },
   };
-  live = inst;
+  inst.settings = (args) => settings(args, inst);
   return inst;
 }
 
