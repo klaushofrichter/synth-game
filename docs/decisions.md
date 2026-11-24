@@ -198,3 +198,9 @@ Records are history: an older record is not edited when a newer one changes it. 
   - **A finished game still writes the table its last stars** (E-020); a phone's first `favorites` that was not
     taken is sent again; a press let go outside the firmware list no longer blocks the next one.
   *Check:* `tests/ui.test.ts` ("keeps listing every firmware when no site answers at all").
+- **E-024 · 2026-11-24 · Klaus** — **The settings window's device, firmware and Restart come from the running board**
+  (games-service D-326, "do this optimization, but for all games for consistency"). The object `mount` returns has
+  `settings()`, which adds the items that act on that board (*Device*, *Choose a firmware…*, *Restart the
+  firmware*); the module's export still gives the volume and the emulated clock before the game is on the table. The
+  file-level `live` goes. A table with a games-service from before D-326 shows only the volume and the clock during
+  the game. Check: `scripts/e2e/fm1_synth.py` (the settings window during the game).

@@ -419,10 +419,12 @@ describe("the board", () => {
     await until(() => synth().plays.length === 3);
     expect(synth().plays[2]).toEqual({ id: "alpha", mhz: 160 });
     expect(synth().volume).toBe(0.4);
-    // the settings window offers the device, the volume, the clock, the firmware window, Restart and names the emulator
+    // the running board's settings window offers the device, the volume, the clock, the firmware window, Restart and
+    // names the emulator (games-service D-326); the module alone, before the game is on the table, only the display
     // @ts-expect-error: a plain module of the game\'s UIs
     const board = await import("../games/fm1-synth/board.js");
-    const items = board.settings({ info: t.info, setPrefs: () => {} });
+    expect(board.settings({ info: t.info, setPrefs: () => {} }).map((i: { label: string }) => i.label)).toEqual(["Volume", "Emulated clock", "Emulator"]);
+    const items = t.inst.settings({ info: t.info, setPrefs: () => {} });
     expect(items.map((i: { label: string }) => i.label)).toEqual(["Device", "Volume", "Emulated clock", "Firmware", "Restart", "Emulator"]);
     expect(items[0].value).toBe("fm1");
     expect(items[5]).toEqual({ type: "text", label: "Emulator", value: "fm1-emu 9.8.7" });
