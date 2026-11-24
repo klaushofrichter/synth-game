@@ -142,6 +142,13 @@ def main():
                  "the board to show the emulator's speed and load")
             assert board.locator(".fs-tap").is_hidden(), "the board asks for a tap although its sound may play"
             shot(board, "board-fm1")
+            # The settings window during the game (games-service D-326): the running board's items, the device and
+            # the firmware among them.
+            board.click("#settings-button")
+            board.locator('.game-settings .row:has-text("Choose a firmware")').wait_for(timeout=5000)
+            for label in ("Device", "Restart the firmware", "Volume"):
+                assert board.locator(f'.game-settings .row:has-text("{label}")').count() >= 1, f"the settings window has no {label}"
+            board.locator(".overlay [data-close-overlay]").first.click()
             check(deck, "phone while playing")
             shot(deck, "phone")
 
